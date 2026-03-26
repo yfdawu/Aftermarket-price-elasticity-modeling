@@ -120,14 +120,27 @@ summary_text = (
 st.markdown(
     f"""
     <div style="
-        background-color:#f9fafb;
+        background-color:#1f2937;
+        color:#ffffff !important;
         padding:18px;
         border-radius:10px;
-        border:1px solid #e5e7eb;
+        border:1px solid #374151;
         font-size:16px;
-        line-height:1.6;
+        line-height:1.8;
     ">
-    {summary_text.replace('\n', '<br>')}
+
+    <b style="color:#ffffff;">Current Price:</b> ${current_price:,.2f}<br><br>
+
+    <b style="color:#ffffff;">Recommended Range:</b><br>
+    <span style="color:#ffffff;">• Revenue-Optimized Price: ${opt['revenue_best_price']:,.2f}</span><br>
+    <span style="color:#ffffff;">• Profit-Optimized Price: ${opt['profit_best_price']:,.2f}</span><br><br>
+
+    <b style="color:#ffffff;">Scenario Impact ({scenario_pct:+.0f}% change):</b><br>
+    <span style="color:#ffffff;">• Demand: {scenario['demand_change_pct']:.2f}%</span><br>
+    <span style="color:#ffffff;">• Revenue: {scenario['revenue_change_pct']:.2f}%</span><br><br>
+
+    <b style="color:#ffffff;">Pricing Signal:</b> <span style="color:#22c55e;">{signal}</span>
+
     </div>
     """,
     unsafe_allow_html=True
