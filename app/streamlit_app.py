@@ -107,16 +107,31 @@ out3.metric("Predicted Revenue Change", f"{scenario['revenue_change_pct']:.2f}%"
 st.markdown(f"**Pricing Response Signal:** {signal}")
 
 summary_text = (
-    f"The current price is ${current_price:,.2f}. "
-    f"The model suggests a revenue-optimized price of ${opt['revenue_best_price']:,.2f} "
-    f"and a profit-optimized price of ${opt['profit_best_price']:,.2f}. "
-    f"Under the selected scenario, the predicted demand changes by "
-    f"{scenario['demand_change_pct']:.2f}% and revenue changes by "
-    f"{scenario['revenue_change_pct']:.2f}%. "
-    f"This product is classified as {signal}."
+    f"Current Price: ${current_price:,.2f}\n\n"
+    f"Recommended Range:\n"
+    f"- Revenue-Optimized Price: ${opt['revenue_best_price']:,.2f}\n"
+    f"- Profit-Optimized Price: ${opt['profit_best_price']:,.2f}\n\n"
+    f"Scenario Impact ({scenario_pct:+.0f}% change):\n"
+    f"- Demand: {scenario['demand_change_pct']:.2f}%\n"
+    f"- Revenue: {scenario['revenue_change_pct']:.2f}%\n\n"
+    f"Pricing Signal: {signal}"
 )
 
-st.info(summary_text)
+st.markdown(
+    f"""
+    <div style="
+        background-color:#f9fafb;
+        padding:18px;
+        border-radius:10px;
+        border:1px solid #e5e7eb;
+        font-size:16px;
+        line-height:1.6;
+    ">
+    {summary_text.replace('\n', '<br>')}
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Historical chart
 st.subheader("Historical Price Trend")
