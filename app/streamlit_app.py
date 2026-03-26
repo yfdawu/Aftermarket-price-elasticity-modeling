@@ -110,24 +110,21 @@ profit_price = opt["profit_best_price"]
 demand_change = scenario["demand_change_pct"]
 revenue_change = scenario["revenue_change_pct"]
 
+st.divider()
+st.write(f"**Current Price:** ${current_price:,.2f}")
+
+st.write("**Recommended Range:**")
+st.write(f"Revenue-Optimized Price: ${revenue_price:,.2f}")
+st.write(f"Profit-Optimized Price: ${profit_price:,.2f}")
+
+st.write(f"**Scenario Impact ({scenario_pct:+.0f}% change):**")
+st.write(f"Demand: {demand_change:.2f}%")
+st.write(f"Revenue: {revenue_change:.2f}%")
+
+signal_color = "green" if signal == "Price Resilient" else "orange"
+
 st.markdown(
-    f"""
-<div style="background-color:#1f2937; padding:18px; border-radius:10px; border:1px solid #374151; font-size:16px; line-height:1.8; color:white;">
-
-<b>Current Price:</b> ${current_price:,.2f}<br><br>
-
-<b>Recommended Range:</b><br>
-Revenue-Optimized Price: ${opt['revenue_best_price']:,.2f}<br>
-Profit-Optimized Price: ${opt['profit_best_price']:,.2f}<br><br>
-
-<b>Scenario Impact ({scenario_pct:+.0f}% change):</b><br>
-Demand: {scenario['demand_change_pct']:.2f}%<br>
-Revenue: {scenario['revenue_change_pct']:.2f}%<br><br>
-
-<b>Pricing Signal:</b> <span style="color:#22c55e;">{signal}</span>
-
-</div>
-""",
+    f"**Pricing Signal:** <span style='color:{signal_color};'>{signal}</span>",
     unsafe_allow_html=True
 )
 
