@@ -29,6 +29,92 @@ Example fields:
 - revenue  
 - product_group  
 
+# Pricing Analytics Simulator
+
+Interactive pricing analytics application demonstrating how data-driven models can support pricing decisions in a B2B distribution environment.
+
+---
+
+## Overview
+
+This project simulates how price changes impact demand, revenue, and profit at the SKU level. It combines machine learning and scenario analysis to provide a practical decision-support tool for pricing strategy.
+
+Designed to reflect real-world challenges such as irregular demand, SKU-level variability, and limited data visibility.
+
+---
+
+## Key Features
+
+- SKU-level price sensitivity modeling  
+- Interactive scenario simulation (+/- price changes)  
+- Revenue and profit optimization analysis  
+- Historical price trend visualization  
+- Revenue vs. profit simulation curves  
+- Clean dashboard built with Streamlit  
+
+---
+
+## Application Preview
+
+### Dashboard
+![Dashboard](App.png)
+
+### Historical Price Trend
+![Historical](Historical.png)
+
+### Revenue & Profit Simulation
+![Simulation](Simulation.png)
+
+---
+## Methodology
+
+### Data
+- Synthetic dataset representing SKU-level pricing across branches and months  
+- Designed to mimic real B2B demand patterns  
+
+### Modeling
+- Machine learning model (XGBoost) estimates demand response  
+- Features include:
+  - Price
+  - Category
+  - Branch
+  - Month  
+
+### Optimization
+- Simulates demand across candidate prices  
+- Calculates:
+  - Revenue = Price × Demand  
+  - Profit = (Price - Cost) × Demand  
+- Identifies optimal pricing points  
+
+### Scenario Analysis
+- User inputs price change (%)  
+- Model predicts:
+  - Demand impact  
+  - Revenue impact  
+- Outputs pricing signal (e.g., Price Resilient)
+
+---
+
+## Tech Stack
+
+- Python  
+- Pandas / NumPy  
+- XGBoost  
+- Scikit-learn  
+- Streamlit  
+- Matplotlib  
+
+---
+
+## How to Run
+
+```bash
+pip install -r requirements.txt
+streamlit run app/streamlit_app.py
+...
+``` 
+
 # Methodology
 
 ### 1. Data Preparation
