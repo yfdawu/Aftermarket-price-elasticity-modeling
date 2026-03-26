@@ -97,52 +97,37 @@ col2.metric("Revenue-Optimized Price", f"${opt['revenue_best_price']:,.2f}")
 col3.metric("Profit-Optimized Price", f"${opt['profit_best_price']:,.2f}")
 
 # Scenario output
-st.subheader("Scenario Impact")
+st.subheader("Scenario Analysis")
 
 out1, out2, out3 = st.columns(3)
-out1.metric("Scenario Price", f"${scenario['scenario_price']:,.2f}")
-out2.metric("Predicted Demand Change", f"{scenario['demand_change_pct']:.2f}%")
-out3.metric("Predicted Revenue Change", f"{scenario['revenue_change_pct']:.2f}%")
 
-st.markdown(f"**Pricing Response Signal:** {signal}")
+out1.metric("Scenario Price", f"${scenario['scenario_price']:.2f}")
+out2.metric("Demand Change", f"{scenario['demand_change_pct']:.2f}%")
+out3.metric("Revenue Change", f"{scenario['revenue_change_pct']:.2f}%")
 
-summary_text = (
-    f"Current Price: ${current_price:,.2f}\n\n"
-    f"Recommended Range:\n"
-    f"- Revenue-Optimized Price: ${opt['revenue_best_price']:,.2f}\n"
-    f"- Profit-Optimized Price: ${opt['profit_best_price']:,.2f}\n\n"
-    f"Scenario Impact ({scenario_pct:+.0f}% change):\n"
-    f"- Demand: {scenario['demand_change_pct']:.2f}%\n"
-    f"- Revenue: {scenario['revenue_change_pct']:.2f}%\n\n"
-    f"Pricing Signal: {signal}"
-)
+revenue_price = opt["revenue_best_price"]
+profit_price = opt["profit_best_price"]
+demand_change = scenario["demand_change_pct"]
+revenue_change = scenario["revenue_change_pct"]
 
 st.markdown(
     f"""
-    <div style="
-        background-color:#1f2937;
-        color:#ffffff !important;
-        padding:18px;
-        border-radius:10px;
-        border:1px solid #374151;
-        font-size:16px;
-        line-height:1.8;
-    ">
+<div style="background-color:#1f2937; padding:18px; border-radius:10px; border:1px solid #374151; font-size:16px; line-height:1.8; color:white;">
 
-    <b style="color:#ffffff;">Current Price:</b> ${current_price:,.2f}<br><br>
+<b>Current Price:</b> ${current_price:,.2f}<br><br>
 
-    <b style="color:#ffffff;">Recommended Range:</b><br>
-    <span style="color:#ffffff;">• Revenue-Optimized Price: ${opt['revenue_best_price']:,.2f}</span><br>
-    <span style="color:#ffffff;">• Profit-Optimized Price: ${opt['profit_best_price']:,.2f}</span><br><br>
+<b>Recommended Range:</b><br>
+• Revenue-Optimized Price: ${revenue_price:,.2f}<br>
+• Profit-Optimized Price: ${profit_price:,.2f}<br><br>
 
-    <b style="color:#ffffff;">Scenario Impact ({scenario_pct:+.0f}% change):</b><br>
-    <span style="color:#ffffff;">• Demand: {scenario['demand_change_pct']:.2f}%</span><br>
-    <span style="color:#ffffff;">• Revenue: {scenario['revenue_change_pct']:.2f}%</span><br><br>
+<b>Scenario Impact ({scenario_pct:+.0f}% change):</b><br>
+• Demand: {demand_change:.2f}%<br>
+• Revenue: {revenue_change:.2f}%<br><br>
 
-    <b style="color:#ffffff;">Pricing Signal:</b> <span style="color:#22c55e;">{signal}</span>
+<b>Pricing Signal:</b> <span style="color:#22c55e;">{signal}</span>
 
-    </div>
-    """,
+</div>
+""",
     unsafe_allow_html=True
 )
 
@@ -150,33 +135,42 @@ st.markdown(
 st.subheader("Historical Price Trend")
 
 hist = df[(df["SKU"] == selected_sku) & (df["Branch"] == selected_branch)].copy()
-month_order = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 hist["Month"] = pd.Categorical(hist["Month"], categories=month_order, ordered=True)
 hist = hist.sort_values("Month")
 hist["Month"] = hist["Month"].astype(str)
 
-fig, ax = plt.subplots(figsize=(8, 4))
+fig, ax = plt.subplots(figsize=(6, 3))
 ax.plot(hist["Month"], hist["Price"], marker="o")
 ax.set_xlabel("Month")
 ax.set_ylabel("Price")
 ax.set_title(f"Historical Price Trend: {selected_sku} in {selected_branch}")
 plt.xticks(rotation=45)
-st.pyplot(fig)
 
+col1, col2, col3 = st.columns([1, 3, 1])
+with col2:
+    st.pyplot(fig)
+    
 # Optimization curve
-st.subheader("Simulated Revenue and Profit by Price")
+st.subheader("Revenue & Profit Simulation")
 
 curve_df = opt["results_table"].copy()
 
-fig2, ax2 = plt.subplots(figsize=(8, 4))
+fig2, ax2 = plt.subplots(figsize=(6, 3))
 ax2.plot(curve_df["Price"], curve_df["Revenue"], label="Revenue")
 ax2.plot(curve_df["Price"], curve_df["Profit"], label="Profit")
 ax2.set_xlabel("Price")
 ax2.set_ylabel("Value")
 ax2.set_title("Simulated Revenue and Profit Across Candidate Prices")
 ax2.legend()
-st.pyplot(fig2)
+
+col1, col2, col3 = st.columns([1, 3, 1])
+with col2:
+    st.pyplot(fig2)
 
 # Detail table
 st.subheader("Selected Product Snapshot")
-st.dataframe(pd.DataFrame([snapshot]), use_container_width=True)
+
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    st.dataframe(pd.DataFrame([snapshot]))
