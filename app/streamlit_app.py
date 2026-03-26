@@ -117,12 +117,12 @@ st.markdown(
 <b>Current Price:</b> ${current_price:,.2f}<br><br>
 
 <b>Recommended Range:</b><br>
-• Revenue-Optimized Price: ${revenue_price:,.2f}<br>
-• Profit-Optimized Price: ${profit_price:,.2f}<br><br>
+Revenue-Optimized Price: ${opt['revenue_best_price']:,.2f}<br>
+Profit-Optimized Price: ${opt['profit_best_price']:,.2f}<br><br>
 
 <b>Scenario Impact ({scenario_pct:+.0f}% change):</b><br>
-• Demand: {demand_change:.2f}%<br>
-• Revenue: {revenue_change:.2f}%<br><br>
+Demand: {scenario['demand_change_pct']:.2f}%<br>
+Revenue: {scenario['revenue_change_pct']:.2f}%<br><br>
 
 <b>Pricing Signal:</b> <span style="color:#22c55e;">{signal}</span>
 
