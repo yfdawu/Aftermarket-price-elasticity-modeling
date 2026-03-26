@@ -117,8 +117,10 @@ st.info(summary_text)
 st.subheader("Historical Price Trend")
 
 hist = df[(df["SKU"] == selected_sku) & (df["Branch"] == selected_branch)].copy()
-hist["Month"] = hist["Month"].astype(str)
+month_order = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+hist["Month"] = pd.Categorical(hist["Month"], categories=month_order, ordered=True)
 hist = hist.sort_values("Month")
+hist["Month"] = hist["Month"].astype(str)
 
 fig, ax = plt.subplots(figsize=(8, 4))
 ax.plot(hist["Month"], hist["Price"], marker="o")
