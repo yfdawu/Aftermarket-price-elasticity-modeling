@@ -1,109 +1,128 @@
-# Aftermarket-price-elasticity-modeling
-Pricing analytics project analyzing price sensitivity across products in a B2B distribution setting, using statistical and machine learning models to simulate pricing scenarios and support data-driven pricing strategy decisions.
-# Overview
-This project presents a pricing analytics workflow designed to understand how price changes impact demand across products in a B2B distribution environment. It combines statistical modeling and machine learning to estimate price sensitivity and simulate pricing scenarios for better decision-making.
-
-# Business Problem
-In large B2B product catalogs, pricing decisions are challenging due to:
-- Irregular and sparse demand patterns across SKUs  
-- Differences in price sensitivity between product categories  
-- Limited visibility into how price changes affect revenue and volume  
-
-This makes it difficult to apply a consistent and data-driven pricing strategy.
-
-# Objectives
-- Estimate price sensitivity (elasticity) across products  
-- Compare interpretable and machine learning models  
-- Simulate the impact of price changes on demand and revenue  
-- Provide insights to support structured pricing decisions  
-
-# Data
-The original project was based on confidential transactional data from a B2B distributor.  
-To preserve confidentiality, this repository uses a **synthetic dataset** that reflects the structure of real-world data without exposing proprietary information.
-
-Example fields:
-- product_id  
-- month  
-- price  
-- units_sold  
-- revenue  
-- product_group  
-
 # Pricing Analytics Simulator
 
-Interactive pricing analytics application demonstrating how data-driven models can support pricing decisions in a B2B distribution environment.
+An interactive pricing tool that helps evaluate how price changes impact demand, revenue, and margin.
 
 ---
 
 ## Overview
 
-This project simulates how price changes impact demand, revenue, and profit at the SKU level. It combines machine learning and scenario analysis to provide a practical decision-support tool for pricing strategy.
+Pricing decisions are often made using static rules or intuition, without fully understanding how customers respond to price changes.
 
-Designed to reflect real-world challenges such as irregular demand, SKU-level variability, and limited data visibility.
+This project was built to make pricing more data-driven by allowing users to simulate different scenarios and immediately see the impact on key business metrics.
 
----
-
-## Key Features
-
-- SKU-level price sensitivity modeling  
-- Interactive scenario simulation (+/- price changes)  
-- Revenue and profit optimization analysis  
-- Historical price trend visualization  
-- Revenue vs. profit simulation curves  
-- Clean dashboard built with Streamlit  
+It combines demand modeling, scenario testing, and portfolio-level insights into a single interface.
 
 ---
 
 ## Application Preview
 
-### Dashboard
-![Dashboard](App.png)
-
-### Historical Price Trend
-![Historical](Historical.png)
-
-### Revenue & Profit Simulation
-![Simulation](Simulation.png)
+![Dashboard](assets/Pricing Simulator.png)
 
 ---
+
+## What This Tool Does
+
+### Scenario Simulation
+
+![Scenario](assets/Pricing Simulator.png)
+
+Test different pricing decisions and instantly see how they affect:
+
+- Demand  
+- Revenue  
+- Margin  
+- Breakeven levels  
+
+The tool also provides a simple pricing signal (e.g., resilient vs sensitive) and basic decision guidance.
+
+---
+
+### Revenue & Demand Behavior
+
+![Revenue](assets/Revenue Graph: Historial Graph.png)
+
+![Model](assets/Modeled Price vs Revenue Graph.png)
+
+These charts show how revenue and demand respond to price changes.
+
+Instead of assuming a straight-line relationship, the model captures more realistic patterns like diminishing returns and optimal pricing zones.
+
+---
+
+### Volume & Tradeoff Analysis
+
+![Volume](assets/Volume Analysis Tab.png)
+
+![Volume Table](assets/Volume Scenario Comparison.png)
+
+![Tradeoff](assets/Tradeoff Table Full.png)
+
+This section focuses on unit economics:
+
+- How volume affects revenue and cost  
+- Where breakeven occurs  
+- How current pricing compares to optimal pricing  
+
+---
+
+### Cost Sensitivity
+
+![Cost](assets/Cost Sensitivity Analysis.png)
+
+Shows how changes in cost assumptions impact margin.
+
+Useful for understanding risk when input costs fluctuate.
+
+---
+
+### Diagnostics & Historical Context
+
+![Diagnostics](assets/Diagnostic Table.png)
+
+Provides context behind the model:
+
+- Historical pricing patterns  
+- Distribution of prices  
+- Basic volatility indicators  
+
+---
+
+### Portfolio View
+
+![Portfolio](assets/Portfolio View.png)
+
+![Portfolio Table](assets/Portfolio Pricing Table.png)
+
+Looks across multiple products to identify pricing opportunities.
+
+Highlights:
+
+- Which SKUs have the most upside  
+- Gaps between current and optimal pricing  
+- Exportable results for further analysis  
+
+---
+
 ## Methodology
 
-### Data
-- Synthetic dataset representing SKU-level pricing across branches and months  
-- Designed to mimic real B2B demand patterns  
+The model uses a machine learning approach (gradient boosting) to estimate how demand responds to price.
 
-### Modeling
-- Machine learning model (XGBoost) estimates demand response  
-- Features include:
-  - Price
-  - Category
-  - Branch
-  - Month  
+From there:
+- Pricing scenarios are simulated  
+- Revenue and margin are recalculated  
+- Optimal price points are identified  
 
-### Optimization
-- Simulates demand across candidate prices  
-- Calculates:
-  - Revenue = Price × Demand  
-  - Profit = (Price - Cost) × Demand  
-- Identifies optimal pricing points  
-
-### Scenario Analysis
-- User inputs price change (%)  
-- Model predicts:
-  - Demand impact  
-  - Revenue impact  
-- Outputs pricing signal (e.g., Price Resilient)
+This allows for more flexibility than traditional price elasticity models, especially when demand patterns are not linear.
 
 ---
 
 ## Tech Stack
 
 - Python  
-- Pandas / NumPy  
-- XGBoost  
-- Scikit-learn  
 - Streamlit  
-- Matplotlib  
+- Pandas / NumPy  
+- Plotly  
+- Scikit-learn / XGBoost  
 
 ---
 
@@ -112,35 +131,3 @@ Designed to reflect real-world challenges such as irregular demand, SKU-level va
 ```bash
 pip install -r requirements.txt
 streamlit run app/streamlit_app.py
-...
-``` 
-
-# Methodology
-
-### 1. Data Preparation
-- Cleaned and structured transactional data  
-- Standardized time-based aggregation  
-- Handled sparse demand patterns  
-
-### 2. Modeling Approaches
-- **Log-Log Regression** → interpretable price elasticity estimates  
-- **Random Forest** → captures nonlinear relationships  
-- **Gradient Boosting** → improved predictive performance  
-
-### 3. Scenario Simulation
-- Simulated price changes (e.g., ±1–10%)  
-- Estimated impact on demand and revenue  
-- Classified products by pricing behavior  
-
-## Key Insights
-- Some products are relatively **price-resilient**, with minimal demand impact  
-- Others are **price-sensitive**, where price changes significantly affect volume  
-- Machine learning models capture nonlinear effects missed by simple regression  
-- Interpretable models remain valuable for explaining business impact  
-
-## Business Value
-This framework demonstrates how pricing teams can move from intuition-based decisions to structured, data-driven strategies. It helps identify where pricing flexibility exists and where aggressive price changes may introduce risk.
-
-## Note
-This repository is a **sanitized portfolio version** of a real-world project.  
-All data, identifiers, and results have been modified or simulated to protect confidentiality.
