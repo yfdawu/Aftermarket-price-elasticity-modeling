@@ -60,23 +60,21 @@ scenario_price = st.sidebar.number_input(
 )
 
 # SIMULATION LOGIC (TEMP PLACEHOLDER)
-def simulate(price, current_price):
-    base_demand = 100
-    elasticity = -1.2
+def simulate(price):
+    peak_price = 146
+    max_revenue = 14500
     margin_rate = 0.30
 
-    demand = base_demand * (price / current_price) ** elasticity
+    revenue = max_revenue - 8 * (price - peak_price) ** 2
+    revenue = max(revenue, 0)
 
-    penalty = np.exp(-0.0008 * (price - current_price) ** 2)
-    adjusted_demand = demand * penalty
-
-    revenue = adjusted_demand * price
+    demand = revenue / price if price > 0 else 0
     margin = revenue * margin_rate
 
-    return adjusted_demand, revenue, margin
+    return demand, revenue, margin
 
-current_demand, current_revenue, current_margin = simulate(current_price, current_price)
-scenario_demand, scenario_revenue, scenario_margin = simulate(scenario_price, current_price)
+current_demand, current_revenue, current_margin = simulate(current_price)
+scenario_demand, scenario_revenue, scenario_margin = simulate(scenario_price)
 
 demand_change = ((scenario_demand - current_demand) / current_demand) * 100 if current_demand != 0 else 0
 revenue_change = ((scenario_revenue - current_revenue) / current_revenue) * 100 if current_revenue != 0 else 0
@@ -116,7 +114,7 @@ else:
 
 # OPTIMIZATION SWEEP
 prices = np.linspace(current_price * 0.8, current_price * 1.2, 50)
-results = [simulate(p, current_price) for p in prices]
+results = [simulate(p) for p in prices]
 
 demands = [r[0] for r in results]
 revenues = [r[1] for r in results]
@@ -126,7 +124,19 @@ rev_opt_price = float(prices[np.argmax(revenues)])
 margin_opt_price = float(prices[np.argmax(margins)])
 
 # DECISION GUIDANCE LOGIC
-risk_level = "Low" if abs(demand_change) < 3 else "Moderate" if abs(demand_change) < 8 else "High"
+# -----------------------------
+# DECISION GUIDANCE LOGIC
+# -----------------------------
+distance_from_revenue_opt = abs(scenario_price - rev_opt_price) / rev_opt_price * 100
+distance_from_margin_opt = abs(scenario_price - margin_opt_price) / margin_opt_price * 100
+nearest_opt_distance = min(distance_from_revenue_opt, distance_from_margin_opt)
+
+if abs(demand_change) < 3 and nearest_opt_distance <= 3:
+    risk_level = "Low"
+elif abs(demand_change) < 8 and nearest_opt_distance <= 8:
+    risk_level = "Moderate"
+else:
+    risk_level = "High"
 
 if scenario_price > current_price:
     scenario_direction = "Price Increase"
@@ -144,22 +154,29 @@ else:
     hist_context = "Outside historical price range"
 
 num_obs = len(filtered_df)
-price_std = filtered_df["Price"].std()
 
-if num_obs >= 10 and pd.notna(price_std) and price_std < 6:
+if num_obs < 6:
+    confidence_level = "Low"
+elif nearest_opt_distance <= 3 and abs(demand_change) <= 5:
     confidence_level = "High"
-elif num_obs >= 6:
+elif nearest_opt_distance <= 8 and abs(demand_change) <= 10:
     confidence_level = "Moderate"
 else:
     confidence_level = "Low"
 
-if revenue_change > 0 and margin_change >= 0:
-    suggested_action = "Test scenario appears viable"
-elif revenue_change > 0 and margin_change < 0:
-    suggested_action = "Revenue improves, but margin should be monitored"
+if abs(scenario_price - current_price) < 0.01:
+    suggested_action = "No change selected; use the slider or input box to test a scenario"
+elif revenue_change > 2 and margin_change > 2 and abs(demand_change) < 5:
+    suggested_action = "Strong candidate for testing: revenue and margin improve with limited volume risk"
+elif revenue_change > 0 and margin_change > 0 and abs(demand_change) < 10:
+    suggested_action = "Viable scenario: gains appear positive, but monitor customer response"
+elif revenue_change > 0 and margin_change <= 0:
+    suggested_action = "Revenue may improve, but margin tradeoff should be reviewed"
+elif revenue_change < 0 and margin_change > 0:
+    suggested_action = "Margin improves, but revenue declines; suitable only if margin protection is the priority"
 else:
-    suggested_action = "Scenario should be reviewed before use"
-
+    suggested_action = "Not recommended: modeled tradeoff suggests the scenario weakens overall performance"
+    
 # DECISION GUIDANCE + RECOMMENDED PRICING
 left_col, right_col = st.columns([3, 2])
 
