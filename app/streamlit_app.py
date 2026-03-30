@@ -214,13 +214,14 @@ with left_col:
 
 with right_col:
     st.subheader("Recommended Pricing")
-st.write(f"**Revenue-Optimal Price:** ${rev_opt_price:.2f}")
-st.write(f"**Margin-Optimal Price:** ${margin_opt_price:.2f}")
-low = rev_opt_price * 0.98
-high = rev_opt_price * 1.02
+    st.write(f"**Revenue-Optimal Price:** ${rev_opt_price:.2f}")
+    st.write(f"**Margin-Optimal Price:** ${margin_opt_price:.2f}")
 
-st.write(f"**Suggested Test Range:** ${low:.2f} to ${high:.2f}")
+    low = rev_opt_price * 0.98
+    high = rev_opt_price * 1.02
 
+    st.write(f"**Suggested Test Range:** ${low:.2f} to ${high:.2f}")
+    
 # TOGGLE (Revenue vs Margin)
 view = st.radio(
     "View Optimization",
@@ -239,73 +240,56 @@ chart_data = pd.DataFrame({
 if view == "Revenue":
     fig = px.line(chart_data, x="Price", y="Revenue", title="Revenue vs Price")
 
-    # Current
-    fig.add_vline(
-        x=current_price,
-        line_dash="dash",
-        line_color="red",
-        annotation_text="Current",
-        annotation_position="top"
-    )
+    fig.add_vline(x=current_price, line_dash="dash", line_color="red")
+    fig.add_vline(x=scenario_price, line_dash="dash", line_color="green")
+    fig.add_vline(x=rev_opt_price, line_dash="dash", line_color="purple")
 
-    # Scenario
-    fig.add_vline(
-        x=scenario_price,
-        line_dash="dash",
-        line_color="green",
-        annotation_text="Scenario",
-        annotation_position="top"
-    )
-
-    # Optimal
-    fig.add_vline(
-        x=rev_opt_price,
-        line_dash="dash",
-        line_color="purple",
-        annotation_text="Optimal",
-        annotation_position="top"
+    fig.add_scatter(
+        x=[current_price, scenario_price, rev_opt_price],
+        y=[current_revenue, scenario_revenue, rev_opt_value],
+        mode="markers+text",
+        text=["Current", "Scenario", "Optimal"],
+        textposition="top center",
+        marker=dict(size=10),
+        showlegend=False
     )
 
 else:
     fig = px.line(chart_data, x="Price", y="Margin", title="Margin vs Price")
 
-    # Current
-    fig.add_vline(
-        x=current_price,
-        line_dash="dash",
-        line_color="red",
-        annotation_text="Current",
-        annotation_position="top"
-    )
+    fig.add_vline(x=current_price, line_dash="dash", line_color="red")
+    fig.add_vline(x=scenario_price, line_dash="dash", line_color="green")
+    fig.add_vline(x=margin_opt_price, line_dash="dash", line_color="purple")
 
-    # Scenario
-    fig.add_vline(
-        x=scenario_price,
-        line_dash="dash",
-        line_color="green",
-        annotation_text="Scenario",
-        annotation_position="top"
-    )
-
-    # Optimal
-    fig.add_vline(
-        x=margin_opt_price,
-        line_dash="dash",
-        line_color="purple",
-        annotation_text="Optimal",
-        annotation_position="top"
+    fig.add_scatter(
+        x=[current_price, scenario_price, margin_opt_price],
+        y=[current_margin, scenario_margin, margin_opt_value],
+        mode="markers+text",
+        text=["Current", "Scenario", "Optimal"],
+        textposition="top center",
+        marker=dict(size=10),
+        showlegend=False
     )
 
 fig.update_layout(template="plotly_dark")
 
 st.plotly_chart(fig, use_container_width=True)
 
-st.caption(
-    f"Current: ${current_revenue:,.0f} | "
-    f"Scenario: ${scenario_revenue:,.0f} | "
-    f"Optimal: ${rev_opt_value:,.0f}"
-)
-
+if view == "Revenue":
+    st.markdown(
+        f"**Current Revenue:** ${current_revenue:,.0f} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"**Scenario Revenue:** ${scenario_revenue:,.0f} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"**Optimal Revenue:** ${rev_opt_value:,.0f}",
+        unsafe_allow_html=True
+    )
+else:
+    st.markdown(
+        f"**Current Margin:** ${current_margin:,.0f} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"**Scenario Margin:** ${scenario_margin:,.0f} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"**Optimal Margin:** ${margin_opt_value:,.0f}",
+        unsafe_allow_html=True
+    )
+    
 # HISTORICAL PRICE TREND
 st.subheader("Historical Price Trend")
 
