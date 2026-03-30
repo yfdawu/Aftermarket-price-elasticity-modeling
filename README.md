@@ -39,7 +39,7 @@ The tool also provides a simple pricing signal (e.g., resilient vs sensitive) an
 
 ### Revenue & Demand Behavior
 
-![Revenue](assets/Revenue_Graph_Historial_Graph.png)
+![Revenue](assets/Revenue_Graph_Historical_Graph.png)
 
 ![Model](assets/Modeled_Price_vs_Revenue_Graph.png)
 
