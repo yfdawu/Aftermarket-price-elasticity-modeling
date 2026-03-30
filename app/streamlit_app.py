@@ -75,10 +75,9 @@ def build_portfolio_table(source_df: pd.DataFrame) -> pd.DataFrame:
         sku_prices = np.linspace(current_sku_price * 0.8, current_sku_price * 1.2, 50)
         sku_results = [simulate(p, peak_rev_sku, max_rev_sku, unit_cost_sku) for p in sku_prices]
         sku_revenues = [r[1] for r in sku_results]
-        sku_margins = [r[2] for r in sku_results]
 
         sku_rev_opt_idx = int(np.argmax(sku_revenues))
-        sku_margin_opt_idx = int(np.argmax(sku_margins))
+        sku_margin_opt_idx = int(np.argmax([r[2] for r in sku_results]))
 
         sku_rev_opt_price = float(sku_prices[sku_rev_opt_idx])
         sku_margin_opt_price = float(sku_prices[sku_margin_opt_idx])
@@ -175,6 +174,9 @@ demand_change = ((scenario_demand - current_demand) / current_demand) * 100 if c
 revenue_change = ((scenario_revenue - current_revenue) / current_revenue) * 100 if current_revenue != 0 else 0
 margin_change = ((scenario_margin - current_margin) / current_margin) * 100 if current_margin != 0 else 0
 
+# Breakeven units at scenario price
+breakeven_units = unit_cost / (scenario_price - unit_cost) if scenario_price > unit_cost else float("inf")
+
 if abs(demand_change) < 5:
     pricing_signal = "Resilient"
 elif abs(demand_change) < 10:
@@ -198,6 +200,8 @@ margin_opt_price = float(prices[margin_opt_idx])
 
 rev_opt_value = float(revenues[rev_opt_idx])
 margin_opt_value = float(margins[margin_opt_idx])
+
+_, _, rev_opt_demand = simulate(rev_opt_price, peak_revenue_price, max_revenue, unit_cost)
 
 # DECISION GUIDANCE LOGIC
 distance_from_revenue_opt = abs(scenario_price - rev_opt_price) / rev_opt_price * 100 if rev_opt_price != 0 else 0
@@ -255,8 +259,9 @@ st.title("Pricing Analytics Simulator")
 st.caption("Evaluate pricing scenarios across demand, revenue, and margin tradeoffs")
 
 # TABS
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Scenario Simulator",
+    "Volume Analysis",
     "Diagnostics",
     "Portfolio View",
     "Model Details"
@@ -264,15 +269,24 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 # ── TAB 1: SCENARIO SIMULATOR ──────────────────────────────────────────────
 with tab1:
-    row1_col1, row1_col2, row1_col3 = st.columns(3)
-    row2_col1, row2_col2, row2_col3 = st.columns(3)
+    # Row 1: Price metrics
+    r1c1, r1c2, r1c3 = st.columns(3)
+    r1c1.metric("Current Price", f"${current_price:.2f}")
+    r1c2.metric("Scenario Price", f"${scenario_price:.2f}")
+    r1c3.metric("Pricing Signal", pricing_signal)
 
-    row1_col1.metric("Current Price", f"${current_price:.2f}")
-    row1_col2.metric("Scenario Price", f"${scenario_price:.2f}")
-    row1_col3.metric("Pricing Signal", pricing_signal)
-    row2_col1.metric("Demand Change", f"{demand_change:.2f}%")
-    row2_col2.metric("Revenue Change", f"{revenue_change:.2f}%")
-    row2_col3.metric("Margin Change", f"{margin_change:.2f}%")
+    # Row 2: Change metrics
+    r2c1, r2c2, r2c3 = st.columns(3)
+    r2c1.metric("Demand Change", f"{demand_change:.2f}%")
+    r2c2.metric("Revenue Change", f"{revenue_change:.2f}%")
+    r2c3.metric("Margin Change", f"{margin_change:.2f}%")
+
+    # Row 3: Volume/unit metrics — NEW
+    r3c1, r3c2, r3c3 = st.columns(3)
+    r3c1.metric("Modeled Units Sold (Current)", f"{current_demand:.1f}")
+    r3c2.metric("Modeled Units Sold (Scenario)", f"{scenario_demand:.1f}", delta=f"{scenario_demand - current_demand:.1f} units")
+    r3c3.metric("Breakeven Units at Scenario Price",
+                f"{breakeven_units:.1f}" if breakeven_units != float("inf") else "N/A — price below cost")
 
     if abs(scenario_price - current_price) < 0.01:
         st.info("No price change selected yet")
@@ -312,75 +326,97 @@ with tab1:
 
     if view == "Revenue":
         fig = px.line(chart_data, x="Price", y="Revenue", title="Revenue vs Price")
-        fig.add_vrect(
+
+        # FIX: Recommended zone shaded region — use shape instead of vrect to avoid label clash
+        fig.add_shape(
+            type="rect",
             x0=low, x1=high,
-            fillcolor="green", opacity=0.08, line_width=0,
-            annotation_text="Recommended Zone", annotation_position="top left"
+            y0=0, y1=1,
+            xref="x", yref="paper",
+            fillcolor="green", opacity=0.08, line_width=0
         )
-        fig.add_vline(x=current_price, line_dash="dash", line_color="red")
-        fig.add_vline(x=scenario_price, line_dash="dash", line_color="green")
-        fig.add_vline(x=rev_opt_price, line_dash="dash", line_color="purple")
+        # Annotation placed at bottom of chart to avoid crowding the top
+        fig.add_annotation(
+            x=(low + high) / 2, y=0.05,
+            xref="x", yref="paper",
+            text="Recommended Zone",
+            showarrow=False,
+            font=dict(color="lightgreen", size=11),
+            bgcolor="rgba(0,0,0,0)"
+        )
+        fig.add_vline(x=current_price, line_dash="dash", line_color="red",
+                      annotation_text="Current", annotation_position="bottom right")
+        fig.add_vline(x=scenario_price, line_dash="dash", line_color="green",
+                      annotation_text="Scenario", annotation_position="bottom left")
+        fig.add_vline(x=rev_opt_price, line_dash="dash", line_color="purple",
+                      annotation_text="Optimal", annotation_position="bottom right")
+
+        # Marker dots only, no text labels (labels now on vlines above)
         fig.add_trace(go.Scatter(
             x=[current_price, scenario_price, rev_opt_price],
             y=[current_revenue, scenario_revenue, rev_opt_value],
-            mode="markers+text",
-            text=["Current", "Scenario", "Optimal"],
-            textposition=["top left", "top right", "top center"],
-            marker=dict(size=10),
-            showlegend=False
+            mode="markers",
+            marker=dict(size=10, color=["red", "green", "purple"]),
+            showlegend=False,
+            hovertemplate="%{y:,.0f}<extra></extra>"
         ))
-        compare_df = pd.DataFrame({
-            "Category": ["Current", "Scenario", "Optimal"],
-            "Value": [current_revenue, scenario_revenue, rev_opt_value]
-        })
+
+        summary_metrics = [
+            ("Current Revenue", current_revenue),
+            ("Scenario Revenue", scenario_revenue),
+            ("Optimal Revenue", rev_opt_value)
+        ]
+
     else:
         margin_low = margin_opt_price * 0.98
         margin_high = margin_opt_price * 1.02
         fig = px.line(chart_data, x="Price", y="Margin", title="Margin vs Price")
-        fig.add_vrect(
+
+        fig.add_shape(
+            type="rect",
             x0=margin_low, x1=margin_high,
-            fillcolor="green", opacity=0.08, line_width=0,
-            annotation_text="Recommended Zone", annotation_position="top left"
+            y0=0, y1=1,
+            xref="x", yref="paper",
+            fillcolor="green", opacity=0.08, line_width=0
         )
-        fig.add_vline(x=current_price, line_dash="dash", line_color="red")
-        fig.add_vline(x=scenario_price, line_dash="dash", line_color="green")
-        fig.add_vline(x=margin_opt_price, line_dash="dash", line_color="purple")
+        fig.add_annotation(
+            x=(margin_low + margin_high) / 2, y=0.05,
+            xref="x", yref="paper",
+            text="Recommended Zone",
+            showarrow=False,
+            font=dict(color="lightgreen", size=11),
+            bgcolor="rgba(0,0,0,0)"
+        )
+        fig.add_vline(x=current_price, line_dash="dash", line_color="red",
+                      annotation_text="Current", annotation_position="bottom right")
+        fig.add_vline(x=scenario_price, line_dash="dash", line_color="green",
+                      annotation_text="Scenario", annotation_position="bottom left")
+        fig.add_vline(x=margin_opt_price, line_dash="dash", line_color="purple",
+                      annotation_text="Optimal", annotation_position="bottom right")
+
         fig.add_trace(go.Scatter(
             x=[current_price, scenario_price, margin_opt_price],
             y=[current_margin, scenario_margin, margin_opt_value],
-            mode="markers+text",
-            text=["Current", "Scenario", "Optimal"],
-            textposition=["top left", "top right", "top center"],
-            marker=dict(size=10),
-            showlegend=False
+            mode="markers",
+            marker=dict(size=10, color=["red", "green", "purple"]),
+            showlegend=False,
+            hovertemplate="%{y:,.0f}<extra></extra>"
         ))
-        compare_df = pd.DataFrame({
-            "Category": ["Current", "Scenario", "Optimal"],
-            "Value": [current_margin, scenario_margin, margin_opt_value]
-        })
+
+        summary_metrics = [
+            ("Current Margin", current_margin),
+            ("Scenario Margin", scenario_margin),
+            ("Optimal Margin", margin_opt_value)
+        ]
 
     fig.update_layout(template="plotly_dark")
     st.plotly_chart(fig, use_container_width=True)
 
-    c1, c2 = st.columns([1.2, 1])
-    with c1:
-        m1, m2, m3 = st.columns(3)
-        if view == "Revenue":
-            m1.metric("Current Revenue", f"${current_revenue:,.0f}")
-            m2.metric("Scenario Revenue", f"${scenario_revenue:,.0f}")
-            m3.metric("Optimal Revenue", f"${rev_opt_value:,.0f}")
-        else:
-            m1.metric("Current Margin", f"${current_margin:,.0f}")
-            m2.metric("Scenario Margin", f"${scenario_margin:,.0f}")
-            m3.metric("Optimal Margin", f"${margin_opt_value:,.0f}")
-
-    with c2:
-        compare_fig = px.bar(
-            compare_df, x="Category", y="Value",
-            title="Current vs Scenario vs Optimal"
-        )
-        compare_fig.update_layout(template="plotly_dark", height=280)
-        st.plotly_chart(compare_fig, use_container_width=True)
+    # Summary metric row — bar chart removed, replaced with clean metrics
+    m1, m2, m3 = st.columns(3)
+    m1.metric(summary_metrics[0][0], f"${summary_metrics[0][1]:,.0f}")
+    m2.metric(summary_metrics[1][0], f"${summary_metrics[1][1]:,.0f}")
+    m3.metric(summary_metrics[2][0], f"${summary_metrics[2][1]:,.0f}")
 
     st.subheader("Historical Price Trend")
     hist_fig = px.line(filtered_df, x="Month", y="Price", title="Price Over Time")
@@ -393,8 +429,198 @@ with tab1:
     hist_fig.update_layout(template="plotly_dark")
     st.plotly_chart(hist_fig, use_container_width=True)
 
-# ── TAB 2: DIAGNOSTICS ─────────────────────────────────────────────────────
+# ── TAB 2: VOLUME ANALYSIS ─────────────────────────────────────────────────
 with tab2:
+    st.subheader("Volume Analysis")
+    st.caption("Explore how the number of units sold affects revenue, margin, and breakeven at any price point")
+
+    vol_col1, vol_col2 = st.columns(2)
+
+    with vol_col1:
+        vol_price = st.number_input(
+            "Price to Analyse",
+            min_value=0.01,
+            value=float(scenario_price),
+            step=0.25,
+            help="Set a price to see how different unit volumes affect outcomes"
+        )
+
+    with vol_col2:
+        max_units = st.slider(
+            "Max Units to Model",
+            min_value=10,
+            max_value=500,
+            value=100,
+            step=10
+        )
+
+    vol_unit_margin = vol_price - unit_cost
+    breakeven_vol = unit_cost / vol_unit_margin if vol_unit_margin > 0 else float("inf")
+
+    # Key volume metrics row
+    vc1, vc2, vc3, vc4 = st.columns(4)
+    vc1.metric("Price per Unit", f"${vol_price:.2f}")
+    vc2.metric("Unit Cost (est.)", f"${unit_cost:.2f}")
+    vc3.metric("Gross Margin per Unit", f"${vol_unit_margin:.2f}" if vol_unit_margin > 0 else "Below cost")
+    vc4.metric(
+        "Breakeven Units",
+        f"{breakeven_vol:.0f}" if breakeven_vol != float("inf") else "N/A"
+    )
+
+    # Volume sweep table and charts
+    unit_range = np.arange(1, max_units + 1)
+    vol_revenues = unit_range * vol_price
+    vol_margins = unit_range * vol_unit_margin if vol_unit_margin > 0 else np.zeros_like(unit_range, dtype=float)
+    vol_costs = unit_range * unit_cost
+
+    vol_df = pd.DataFrame({
+        "Units Sold": unit_range,
+        "Total Revenue": vol_revenues,
+        "Total Margin": vol_margins,
+        "Total Cost": vol_costs
+    })
+
+    left_v, right_v = st.columns(2)
+
+    with left_v:
+        st.markdown("### Revenue & Cost vs Units Sold")
+        rev_vol_fig = go.Figure()
+        rev_vol_fig.add_trace(go.Scatter(
+            x=vol_df["Units Sold"], y=vol_df["Total Revenue"],
+            mode="lines", name="Revenue", line=dict(color="steelblue")
+        ))
+        rev_vol_fig.add_trace(go.Scatter(
+            x=vol_df["Units Sold"], y=vol_df["Total Cost"],
+            mode="lines", name="Total Cost", line=dict(color="tomato", dash="dash")
+        ))
+        if breakeven_vol != float("inf") and breakeven_vol <= max_units:
+            rev_vol_fig.add_vline(
+                x=breakeven_vol, line_dash="dot", line_color="yellow",
+                annotation_text=f"Breakeven ({breakeven_vol:.0f} units)",
+                annotation_position="top right"
+            )
+        rev_vol_fig.update_layout(
+            template="plotly_dark",
+            xaxis_title="Units Sold",
+            yaxis_title="Value ($)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(rev_vol_fig, use_container_width=True)
+
+    with right_v:
+        st.markdown("### Margin vs Units Sold")
+        margin_vol_fig = go.Figure()
+        margin_vol_fig.add_trace(go.Scatter(
+            x=vol_df["Units Sold"], y=vol_df["Total Margin"],
+            mode="lines", name="Margin",
+            line=dict(color="mediumseagreen"),
+            fill="tozeroy", fillcolor="rgba(60,179,113,0.1)"
+        ))
+        if breakeven_vol != float("inf") and breakeven_vol <= max_units:
+            margin_vol_fig.add_vline(
+                x=breakeven_vol, line_dash="dot", line_color="yellow",
+                annotation_text=f"Breakeven ({breakeven_vol:.0f} units)",
+                annotation_position="top right"
+            )
+        margin_vol_fig.add_hline(y=0, line_color="gray", line_width=1)
+        margin_vol_fig.update_layout(
+            template="plotly_dark",
+            xaxis_title="Units Sold",
+            yaxis_title="Total Margin ($)"
+        )
+        st.plotly_chart(margin_vol_fig, use_container_width=True)
+
+    # Specific volume comparison table
+    st.markdown("### Volume Scenario Comparison")
+    st.caption("Compare specific unit volumes side by side at the selected price")
+
+    compare_units = [5, 10, 20, 30, 50, 75, 100]
+    compare_units = [u for u in compare_units if u <= max_units]
+
+    compare_rows = []
+    for u in compare_units:
+        total_rev = u * vol_price
+        total_cost_val = u * unit_cost
+        total_margin_val = u * vol_unit_margin if vol_unit_margin > 0 else 0
+        margin_pct = (total_margin_val / total_rev * 100) if total_rev > 0 else 0
+        above_breakeven = "✅" if vol_unit_margin > 0 and u >= breakeven_vol else "❌"
+        compare_rows.append({
+            "Units Sold": u,
+            "Total Revenue": f"${total_rev:,.2f}",
+            "Total Cost": f"${total_cost_val:,.2f}",
+            "Total Margin": f"${total_margin_val:,.2f}",
+            "Margin %": f"{margin_pct:.1f}%",
+            "Above Breakeven": above_breakeven
+        })
+
+    st.dataframe(pd.DataFrame(compare_rows), use_container_width=True, hide_index=True)
+
+    # Price vs volume tradeoff — min/max price context
+    st.markdown("### Price vs Volume Tradeoff")
+    st.caption(
+        f"Min price to break even at a given volume, and max revenue price. "
+        f"Unit cost assumed at \\${unit_cost:.2f}"
+    )
+
+    tradeoff_units = np.arange(5, max_units + 1, 5)
+    tradeoff_rows = []
+    for u in tradeoff_units:
+        min_price_be = unit_cost  # any price above unit cost is technically breakeven per unit
+        rev_at_current = u * current_price
+        rev_at_optimal = u * rev_opt_price
+        margin_at_current = u * (current_price - unit_cost) if current_price > unit_cost else 0
+        margin_at_optimal = u * (rev_opt_price - unit_cost) if rev_opt_price > unit_cost else 0
+        tradeoff_rows.append({
+            "Units": u,
+            "Min Breakeven Price": f"${unit_cost:.2f}",
+            "Revenue at Current Price": f"${rev_at_current:,.2f}",
+            "Revenue at Optimal Price": f"${rev_at_optimal:,.2f}",
+            "Margin at Current Price": f"${margin_at_current:,.2f}",
+            "Margin at Optimal Price": f"${margin_at_optimal:,.2f}"
+        })
+
+    tradeoff_df = pd.DataFrame(tradeoff_rows)
+
+    # Chart version of the tradeoff
+    tradeoff_fig = go.Figure()
+    tradeoff_fig.add_trace(go.Scatter(
+        x=tradeoff_units,
+        y=[u * current_price for u in tradeoff_units],
+        mode="lines", name=f"Revenue at Current (\\${current_price:.2f})",
+        line=dict(color="tomato")
+    ))
+    tradeoff_fig.add_trace(go.Scatter(
+        x=tradeoff_units,
+        y=[u * rev_opt_price for u in tradeoff_units],
+        mode="lines", name=f"Revenue at Optimal (\\${rev_opt_price:.2f})",
+        line=dict(color="mediumpurple")
+    ))
+    tradeoff_fig.add_trace(go.Scatter(
+        x=tradeoff_units,
+        y=[u * (current_price - unit_cost) if current_price > unit_cost else 0 for u in tradeoff_units],
+        mode="lines", name=f"Margin at Current (\\${current_price:.2f})",
+        line=dict(color="tomato", dash="dash")
+    ))
+    tradeoff_fig.add_trace(go.Scatter(
+        x=tradeoff_units,
+        y=[u * (rev_opt_price - unit_cost) if rev_opt_price > unit_cost else 0 for u in tradeoff_units],
+        mode="lines", name=f"Margin at Optimal (\\${rev_opt_price:.2f})",
+        line=dict(color="mediumpurple", dash="dash")
+    ))
+    tradeoff_fig.update_layout(
+        template="plotly_dark",
+        title="Revenue & Margin at Current vs Optimal Price Across Unit Volumes",
+        xaxis_title="Units Sold",
+        yaxis_title="Value ($)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(tradeoff_fig, use_container_width=True)
+
+    with st.expander("View full tradeoff table"):
+        st.dataframe(tradeoff_df, use_container_width=True, hide_index=True)
+
+# ── TAB 3: DIAGNOSTICS ─────────────────────────────────────────────────────
+with tab3:
     st.subheader("Diagnostics")
     st.caption("Distribution, volatility, cost sensitivity, and modeled response curves for the selected SKU")
 
@@ -474,7 +700,6 @@ with tab2:
         revenue_scatter_fig.update_layout(template="plotly_dark")
         st.plotly_chart(revenue_scatter_fig, use_container_width=True)
 
-    # Cost sensitivity table 
     st.markdown("### Cost Sensitivity Analysis")
     st.caption("Shows how margin changes under different unit cost assumptions")
     cost_multipliers = np.linspace(0.50, 0.80, 7)
@@ -508,8 +733,8 @@ with tab2:
         st.markdown(f"**Margin-Optimal Price:** \\${margin_opt_price:.2f}")
         st.markdown(f"**Historical Price Range:** \\${hist_min:.2f} to \\${hist_max:.2f}")
 
-# ── TAB 3: PORTFOLIO VIEW ──────────────────────────────────────────────────
-with tab3:
+# ── TAB 4: PORTFOLIO VIEW ──────────────────────────────────────────────────
+with tab4:
     st.subheader("Portfolio View")
 
     portfolio_branch = st.selectbox(
@@ -581,8 +806,8 @@ with tab3:
             else:
                 st.warning("Excel export unavailable. Install openpyxl: `pip install openpyxl`")
 
-# ── TAB 4: MODEL DETAILS ───────────────────────────────────────────────────
-with tab4:
+# ── TAB 5: MODEL DETAILS ───────────────────────────────────────────────────
+with tab5:
     st.subheader("Model Details")
 
     st.markdown("""
