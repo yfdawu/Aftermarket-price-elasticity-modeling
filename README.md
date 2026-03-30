@@ -131,3 +131,8 @@ This allows for more flexibility than traditional price elasticity models, espec
 ```bash
 pip install -r requirements.txt
 streamlit run app/streamlit_app.py
+```
+## Usage
+This project is intended for portfolio and educational purposes.
+
+If you reference or build upon this work, please provide appropriate attribution.
