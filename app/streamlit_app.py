@@ -1,173 +1,140 @@
-import sys
-import os
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import numpy as np
+import plotly.express as px
 
-from src.pricing_model import (
-    load_data,
-    train_model,
-    get_product_snapshot,
-    optimize_price,
-    scenario_test,
-    sensitivity_label
+# PAGE CONFIG
+st.set_page_config(
+    page_title="Pricing Simulator",
+    layout="wide"
 )
 
-st.set_page_config(page_title="Pricing Analytics Simulator", layout="wide")
+# LOAD DATA
 
-st.title("Pricing Analytics Simulator")
-st.markdown(
-    "Interactive pricing scenario tool demonstrating how data-driven models can support "
-    "pricing decisions in a B2B distribution setting."
-)
-# Load data and train model
 @st.cache_data
-def get_data():
-    return load_data("data/synthetic_pricing_data.csv")
+def load_data():
+    return pd.read_csv("data/synthetic_pricing_data.csv")
 
-@st.cache_resource
-def get_trained_model(df):
-    return train_model(df)
+df = load_data()
 
-df = get_data()
-model, feature_columns = get_trained_model(df)
-
-# Sidebar inputs
+# SIDEBAR CONTROLS
 st.sidebar.header("Scenario Inputs")
 
-sku_options = sorted(df["SKU"].unique())
-selected_sku = st.sidebar.selectbox("Select Product", sku_options)
+sku = st.sidebar.selectbox("Select Product (SKU)", df["SKU"].unique())
+branch = st.sidebar.selectbox("Select Branch", df["Branch"].unique())
 
-branch_options = sorted(df[df["SKU"] == selected_sku]["Branch"].unique())
-selected_branch = st.sidebar.selectbox("Select Branch", branch_options)
-
-month_options = df["Month"].cat.categories.tolist()
-available_months = df[
-    (df["SKU"] == selected_sku) & (df["Branch"] == selected_branch)
-]["Month"].astype(str).unique().tolist()
-
-filtered_month_options = [m for m in month_options if m in available_months]
-selected_month = st.sidebar.selectbox("Select Month", filtered_month_options)
-
-scenario_pct = st.sidebar.slider("Scenario Price Change (%)", min_value=-10, max_value=10, value=5, step=1)
-
-snapshot = get_product_snapshot(df, selected_sku, selected_branch, selected_month)
-
-if snapshot is None:
-    st.error("No matching product snapshot found.")
-    st.stop()
-
-current_price = snapshot["price"]
-category = snapshot["category"]
-unit_cost = snapshot["unit_cost"]
-
-# Run model logic
-opt = optimize_price(
-    model=model,
-    category=category,
-    branch=selected_branch,
-    month=selected_month,
-    unit_cost=unit_cost,
-    feature_columns=feature_columns,
-    price_min=max(10, current_price * 0.7),
-    price_max=current_price * 1.3,
-    step=1
+price_change_pct = st.sidebar.slider(
+    "Price Change (%)",
+    -20, 20, 0
 )
 
-scenario = scenario_test(
-    model=model,
-    current_price=current_price,
-    scenario_pct=scenario_pct,
-    category=category,
-    branch=selected_branch,
-    month=selected_month,
-    feature_columns=feature_columns
+# Filter data
+filtered_df = df[(df["SKU"] == sku) & (df["Branch"] == branch)]
+
+# Assume latest price
+current_price = filtered_df["Price"].iloc[-1]
+scenario_price = current_price * (1 + price_change_pct / 100)
+
+# SIMULATION LOGIC (TEMP / SIMPLE)
+def simulate(price):
+    base_demand = 100
+    elasticity = -1.2
+    
+    demand = base_demand * (price / current_price) ** elasticity
+    revenue = demand * price
+    margin = revenue * 0.3  # assume 30% margin
+    
+    return demand, revenue, margin
+
+current_demand, current_revenue, current_margin = simulate(current_price)
+scenario_demand, scenario_revenue, scenario_margin = simulate(scenario_price)
+
+# % changes
+demand_change = (scenario_demand - current_demand) / current_demand * 100
+revenue_change = (scenario_revenue - current_revenue) / current_revenue * 100
+margin_change = (scenario_margin - current_margin) / current_margin * 100
+
+# HEADER
+st.title("Pricing Analytics Simulator")
+st.caption("Evaluate pricing scenarios across demand, revenue, and margin tradeoffs")
+
+# KPI ROW
+col1, col2, col3, col4, col5, col6 = st.columns(6)
+
+col1.metric("Current Price", f"${current_price:.2f}")
+col2.metric("Scenario Price", f"${scenario_price:.2f}")
+col3.metric("Demand Change", f"{demand_change:.2f}%")
+col4.metric("Revenue Change", f"{revenue_change:.2f}%")
+col5.metric("Margin Change", f"{margin_change:.2f}%")
+col6.metric("Pricing Signal", "Resilient" if abs(demand_change) < 5 else "Sensitive")
+
+# RECOMMENDATION BANNER
+if revenue_change > 0:
+    st.success("Controlled price increase appears viable")
+else:
+    st.warning("Price change may negatively impact revenue")
+
+# SUMMARY SECTION
+col_left, col_right = st.columns([3, 2])
+
+with col_left:
+    st.subheader("Scenario Summary")
+    st.write(f"Current Price: ${current_price:.2f}")
+    st.write(f"Scenario Price: ${scenario_price:.2f}")
+    st.write(f"Demand Change: {demand_change:.2f}%")
+    st.write(f"Revenue Change: {revenue_change:.2f}%")
+    st.write(f"Margin Change: {margin_change:.2f}%")
+
+with col_right:
+    st.subheader("Recommended Pricing")
+    
+    # simple optimization sweep
+    prices = np.linspace(current_price * 0.8, current_price * 1.2, 50)
+    results = [simulate(p) for p in prices]
+    
+    revenues = [r[1] for r in results]
+    margins = [r[2] for r in results]
+    
+    rev_opt_price = prices[np.argmax(revenues)]
+    margin_opt_price = prices[np.argmax(margins)]
+    
+    st.write(f"Best for Revenue: ${rev_opt_price:.2f}")
+    st.write(f"Best for Margin: ${margin_opt_price:.2f}")
+    st.write("Suggested Test Range: ±5%")
+
+# TOGGLE (Revenue vs Margin)
+view = st.radio(
+    "View Optimization",
+    ["Revenue", "Margin"],
+    horizontal=True
 )
 
-signal = sensitivity_label(scenario["demand_change_pct"])
+# MAIN CHART
+chart_data = pd.DataFrame({
+    "Price": prices,
+    "Revenue": revenues,
+    "Margin": margins
+})
 
-# Top metrics
-col1, col2, col3 = st.columns(3)
+if view == "Revenue":
+    fig = px.line(chart_data, x="Price", y="Revenue", title="Revenue vs Price")
+    fig.add_scatter(x=[current_price], y=[current_revenue], mode="markers", name="Current")
+    fig.add_scatter(x=[scenario_price], y=[scenario_revenue], mode="markers", name="Scenario")
+else:
+    fig = px.line(chart_data, x="Price", y="Margin", title="Margin vs Price")
+    fig.add_scatter(x=[current_price], y=[current_margin], mode="markers", name="Current")
+    fig.add_scatter(x=[scenario_price], y=[scenario_margin], mode="markers", name="Scenario")
 
-col1.metric("Current Price", f"${current_price:,.2f}")
-col2.metric("Revenue-Optimized Price", f"${opt['revenue_best_price']:,.2f}")
-col3.metric("Profit-Optimized Price", f"${opt['profit_best_price']:,.2f}")
+st.plotly_chart(fig, use_container_width=True)
 
-# Scenario output
-st.subheader("Scenario Analysis")
-
-out1, out2, out3 = st.columns(3)
-
-out1.metric("Scenario Price", f"${scenario['scenario_price']:.2f}")
-out2.metric("Demand Change", f"{scenario['demand_change_pct']:.2f}%")
-out3.metric("Revenue Change", f"{scenario['revenue_change_pct']:.2f}%")
-
-revenue_price = opt["revenue_best_price"]
-profit_price = opt["profit_best_price"]
-demand_change = scenario["demand_change_pct"]
-revenue_change = scenario["revenue_change_pct"]
-
-st.divider()
-st.write(f"**Current Price:** ${current_price:,.2f}")
-
-st.write("**Recommended Range:**")
-st.write(f"Revenue-Optimized Price: ${revenue_price:,.2f}")
-st.write(f"Profit-Optimized Price: ${profit_price:,.2f}")
-
-st.write(f"**Scenario Impact ({scenario_pct:+.0f}% change):**")
-st.write(f"Demand: {demand_change:.2f}%")
-st.write(f"Revenue: {revenue_change:.2f}%")
-
-signal_color = "green" if signal == "Price Resilient" else "orange"
-
-st.markdown(
-    f"**Pricing Signal:** <span style='color:{signal_color};'>{signal}</span>",
-    unsafe_allow_html=True
-)
-
-# Historical chart
+# HISTORICAL PRICE TREND
 st.subheader("Historical Price Trend")
 
-hist = df[(df["SKU"] == selected_sku) & (df["Branch"] == selected_branch)].copy()
-month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-hist["Month"] = pd.Categorical(hist["Month"], categories=month_order, ordered=True)
-hist = hist.sort_values("Month")
-hist["Month"] = hist["Month"].astype(str)
+hist_fig = px.line(
+    filtered_df,
+    x="Month",
+    y="Price",
+    title="Price Over Time"
+)
 
-fig, ax = plt.subplots(figsize=(6, 3))
-ax.plot(hist["Month"], hist["Price"], marker="o")
-ax.set_xlabel("Month")
-ax.set_ylabel("Price")
-ax.set_title(f"Historical Price Trend: {selected_sku} in {selected_branch}")
-plt.xticks(rotation=45)
-
-col1, col2, col3 = st.columns([1, 3, 1])
-with col2:
-    st.pyplot(fig)
-    
-# Optimization curve
-st.subheader("Revenue & Profit Simulation")
-
-curve_df = opt["results_table"].copy()
-
-fig2, ax2 = plt.subplots(figsize=(6, 3))
-ax2.plot(curve_df["Price"], curve_df["Revenue"], label="Revenue")
-ax2.plot(curve_df["Price"], curve_df["Profit"], label="Profit")
-ax2.set_xlabel("Price")
-ax2.set_ylabel("Value")
-ax2.set_title("Simulated Revenue and Profit Across Candidate Prices")
-ax2.legend()
-
-col1, col2, col3 = st.columns([1, 3, 1])
-with col2:
-    st.pyplot(fig2)
-
-# Detail table
-st.subheader("Selected Product Snapshot")
-
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    st.dataframe(pd.DataFrame([snapshot]))
+st.plotly_chart(hist_fig, use_container_width=True)
