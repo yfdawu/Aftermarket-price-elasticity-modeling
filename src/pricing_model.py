@@ -1,8 +1,6 @@
 """
 src/pricing_model.py
-====================
 XGBoost (gradient boosting) pricing model.
- 
 Flow
 ----
 1. load_data()           — load and clean the CSV
@@ -11,54 +9,55 @@ Flow
                            predicted units / revenue / margin in a lookup dict
 4. lookup_scenario()     — given a price, interpolate from the precomputed sweep
                            (called on every slider move — essentially instant)
- 
 The app imports and calls these four functions only.
 Everything else here is internal.
 """
- 
+
 import numpy as np
 import pandas as pd
 from xgboost import XGBRegressor
- 
-#CONSTANTS
- 
+from scipy.signal import savgol_filter
+
+# CONSTANTS 
+
 MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
- 
+
 # Mid-year average: average month number used for all predictions
 # June (6) sits at the midpoint of the year.
 MID_YEAR_MONTH = "Jun"
 
-# Price sweep range: ±30% around each SKU's historical average price.
-# Wide enough to find the true optimum, narrow enough to stay realistic.
-SWEEP_PCT_LOW  = 0.70
-SWEEP_PCT_HIGH = 1.30
-SWEEP_STEPS    = 60   # 60 points = smooth curve, fast to compute
- 
- 
-#1. LOAD DATA 
- 
+# Price sweep range: ±15% around each SKU's historical average price.
+# Kept tight so the model only predicts within the range it trained on.
+# Widen this when you have real data with more price variation.
+SWEEP_PCT_LOW  = 0.85
+SWEEP_PCT_HIGH = 1.15
+SWEEP_STEPS    = 120  # more points = smoother curve after filtering
+
+
+# 1. LOAD DATA
+
 def load_data(file_path: str = "data/synthetic_pricing_data.csv") -> pd.DataFrame:
     """Load CSV and sort months correctly."""
     df = pd.read_csv(file_path)
     df.columns = [c.strip() for c in df.columns]
     df["Month"] = pd.Categorical(df["Month"], categories=MONTH_ORDER, ordered=True)
     return df
- 
- 
-# 2. TRAIN MODEL
- 
+
+
+# 2. TRAIN MODEL 
+
 def _prepare_features(df: pd.DataFrame):
     """
     Build feature matrix and target vector.
- 
+
     Features used:
       - Price          (continuous — the main lever)
       - Category       (one-hot)
       - Branch         (one-hot)
       - Month          (one-hot — captures any residual seasonal signal
                         in the training data without us hard-coding it)
- 
+
     Target: Units (actual demand from the data)
     """
     X = pd.get_dummies(
@@ -67,12 +66,12 @@ def _prepare_features(df: pd.DataFrame):
     )
     y = df["Units"]
     return X, y
- 
- 
+
+
 def train_model(df: pd.DataFrame):
     """
     Train XGBoost on the full dataset.
- 
+
     Returns
     -------
     model : trained XGBRegressor
@@ -81,7 +80,7 @@ def train_model(df: pd.DataFrame):
         when building prediction rows later.
     """
     X, y = _prepare_features(df)
- 
+
     model = XGBRegressor(
         n_estimators=200,
         max_depth=4,
@@ -92,12 +91,12 @@ def train_model(df: pd.DataFrame):
         random_state=42
     )
     model.fit(X, y)
- 
+
     return model, X.columns.tolist()
- 
- 
-# INTERNAL: single prediction
- 
+
+
+# INTERNAL: single prediction 
+
 def _build_row(price: float, category: str, branch: str,
                month: str, feature_columns: list) -> pd.DataFrame:
     """Build a single one-row feature DataFrame matching training columns."""
@@ -108,31 +107,31 @@ def _build_row(price: float, category: str, branch: str,
         "Month":    [month]
     })
     row_enc = pd.get_dummies(row, drop_first=False)
- 
+
+    # Add any columns present in training but missing here (set to 0)
     for col in feature_columns:
         if col not in row_enc.columns:
             row_enc[col] = 0
- 
+
     return row_enc[feature_columns]
- 
- 
+
+
 def _predict_units(model, price: float, category: str, branch: str,
                    month: str, feature_columns: list) -> float:
     """Predict units at a single price point. Returns 0 if negative."""
     row = _build_row(price, category, branch, month, feature_columns)
     return max(0.0, float(model.predict(row)[0]))
- 
- 
-# 3. PRECOMPUTE SWEEPS
- 
+
+
+#3. PRECOMPUTE SWEEPS
 def precompute_sweeps(df: pd.DataFrame, model, feature_columns: list) -> dict:
     """
     For every SKU x Branch combination, sweep a range of prices and store
     the full demand / revenue / margin curve.
- 
+
     This runs ONCE on app load (takes ~1-3 seconds).
     After that all slider interactions are instant lookups.
- 
+
     Returns
     -------
     sweeps : dict
@@ -149,38 +148,49 @@ def precompute_sweeps(df: pd.DataFrame, model, feature_columns: list) -> dict:
         }
     """
     sweeps = {}
- 
+
     for sku in sorted(df["SKU"].dropna().unique()):
         sku_df = df[df["SKU"] == sku]
- 
+
         for branch in sorted(sku_df["Branch"].dropna().unique()):
             branch_df = sku_df[sku_df["Branch"] == branch]
- 
+
             if branch_df.empty:
                 continue
- 
+
             category  = branch_df["Category"].iloc[0]
             unit_cost = float(branch_df["Unit_Cost"].iloc[0])
             avg_price = float(branch_df["Price"].mean())
- 
+
             price_min = avg_price * SWEEP_PCT_LOW
             price_max = avg_price * SWEEP_PCT_HIGH
             prices    = np.linspace(price_min, price_max, SWEEP_STEPS)
- 
+
             units = np.array([
                 _predict_units(model, p, category, branch,
                                MID_YEAR_MONTH, feature_columns)
                 for p in prices
             ])
- 
+
+            # Smooth the predicted demand curve to remove jagged noise
+            # caused by limited training data. Savitzky-Golay preserves
+            # the general shape (peaks, slopes) while removing point-to-point
+            # noise. Window must be odd and < len(units).
+            # Remove this line when real company data produces a clean signal.
+            window = min(21, len(units) - 1 if len(units) % 2 == 0 else len(units))
+            window = window if window % 2 == 1 else window - 1  # ensure odd
+            window = max(window, 5)
+            units = savgol_filter(units, window_length=window, polyorder=3)
+            units = np.clip(units, 0, None)  # no negative demand after smoothing
+
             revenue = prices * units
             margin  = np.where(prices > unit_cost,
                                (prices - unit_cost) * units,
                                0.0)
- 
+
             rev_opt_price    = float(prices[np.argmax(revenue)])
             margin_opt_price = float(prices[np.argmax(margin)])
- 
+
             sweeps[(sku, branch)] = {
                 "prices":            prices,
                 "units":             units,
@@ -191,21 +201,21 @@ def precompute_sweeps(df: pd.DataFrame, model, feature_columns: list) -> dict:
                 "rev_opt_price":     rev_opt_price,
                 "margin_opt_price":  margin_opt_price,
             }
- 
+
     return sweeps
- 
- 
-# 4. LOOKUP SCENARIO
- 
+
+
+#4. LOOKUP SCENARIO 
+
 def lookup_scenario(sweeps: dict, sku: str, branch: str,
                     price: float) -> dict:
     """
     Interpolate demand, revenue, and margin at any price from the
     precomputed sweep for a given SKU + Branch.
- 
+
     This is what runs on every slider move — no model inference,
     just a numpy interpolation (~microseconds).
- 
+
     Returns
     -------
     dict with keys:
@@ -214,17 +224,18 @@ def lookup_scenario(sweeps: dict, sku: str, branch: str,
         prices, units, revenues, margins   ← full curves for charts
     """
     key = (sku, branch)
- 
+
     if key not in sweeps:
+        # Should not happen if precompute_sweeps ran correctly
         return _empty_scenario(price)
- 
+
     s = sweeps[key]
- 
+
     predicted_units = float(np.interp(price, s["prices"], s["units"]))
     predicted_units = max(predicted_units, 0.0)
     revenue         = price * predicted_units
     margin          = (price - s["unit_cost"]) * predicted_units if price > s["unit_cost"] else 0.0
- 
+
     return {
         # — point values at the queried price —
         "predicted_units":   predicted_units,
@@ -240,8 +251,8 @@ def lookup_scenario(sweeps: dict, sku: str, branch: str,
         "revenues":          s["revenue"],
         "margins":           s["margin"],
     }
- 
- 
+
+
 def _empty_scenario(price: float) -> dict:
     """Fallback returned if a SKU/Branch key is missing from sweeps."""
     return {
@@ -256,10 +267,10 @@ def _empty_scenario(price: float) -> dict:
         "revenues":          np.array([0.0]),
         "margins":           np.array([0.0]),
     }
- 
- 
-# HELPERS USED BY THE APP
- 
+
+
+#HELPERS USED BY THE APP
+
 def get_product_snapshot(df: pd.DataFrame, sku: str, branch: str) -> dict | None:
     """
     Return current price, cost, and category for a SKU + Branch.
@@ -267,13 +278,13 @@ def get_product_snapshot(df: pd.DataFrame, sku: str, branch: str) -> dict | None
     Month parameter removed — app no longer needs to pass it.
     """
     rows = df[(df["SKU"] == sku) & (df["Branch"] == branch)]
- 
+
     if rows.empty:
         return None
- 
+
     # Most recent month
     row = rows.sort_values("Month").iloc[-1]
- 
+
     return {
         "sku":       row["SKU"],
         "branch":    row["Branch"],
@@ -281,8 +292,8 @@ def get_product_snapshot(df: pd.DataFrame, sku: str, branch: str) -> dict | None
         "category":  row["Category"],
         "unit_cost": float(row["Unit_Cost"]),
     }
- 
- 
+
+
 def sensitivity_label(demand_change_pct: float) -> str:
     """Classify price sensitivity from a percentage demand change."""
     if demand_change_pct <= -10:
@@ -291,48 +302,48 @@ def sensitivity_label(demand_change_pct: float) -> str:
         return "Moderately Sensitive"
     else:
         return "Price Resilient"
- 
- 
+
+
 def get_portfolio_summary(df: pd.DataFrame, sweeps: dict,
                            branch_filter: str = "All") -> pd.DataFrame:
     """
     Build a portfolio-level summary table across all SKUs.
     Used by the Portfolio tab in the app.
- 
+
     Parameters
     ----------
     branch_filter : "All" or a specific branch name
     """
     rows = []
- 
+
     for sku in sorted(df["SKU"].dropna().unique()):
         sku_df = df[df["SKU"] == sku]
- 
+
         branches = (
             sku_df["Branch"].unique()
             if branch_filter == "All"
             else [branch_filter]
         )
- 
+
         for branch in sorted(branches):
             key = (sku, branch)
             if key not in sweeps:
                 continue
- 
+
             s         = sweeps[key]
             snap      = get_product_snapshot(df, sku, branch)
             if snap is None:
                 continue
- 
+
             current_price = snap["price"]
             unit_cost     = s["unit_cost"]
- 
+
             # Current performance
             current = lookup_scenario(sweeps, sku, branch, current_price)
- 
+
             # Optimal performance
             optimal = lookup_scenario(sweeps, sku, branch, s["rev_opt_price"])
- 
+
             revenue_upside_pct = (
                 (optimal["revenue"] - current["revenue"]) / current["revenue"] * 100
                 if current["revenue"] > 0 else 0.0
@@ -341,7 +352,7 @@ def get_portfolio_summary(df: pd.DataFrame, sweeps: dict,
                 (s["rev_opt_price"] - current_price) / current_price * 100
                 if current_price > 0 else 0.0
             )
- 
+
             rows.append({
                 "SKU":                   sku,
                 "Branch":                branch,
@@ -355,6 +366,5 @@ def get_portfolio_summary(df: pd.DataFrame, sweeps: dict,
                 "Unit Cost":             round(unit_cost, 2),
                 "Observations":          len(df[(df["SKU"] == sku) & (df["Branch"] == branch)])
             })
- 
+
     return pd.DataFrame(rows)
- 
