@@ -214,9 +214,12 @@ with left_col:
 
 with right_col:
     st.subheader("Recommended Pricing")
-    st.write(f"**Best for Revenue:** ${rev_opt_price:.2f}")
-    st.write(f"**Best for Margin:** ${margin_opt_price:.2f}")
-    st.write(f"**Suggested Test Range:** ${rev_opt_price * 0.98:.2f} – ${rev_opt_price * 1.02:.2f}")
+st.write(f"**Revenue-Optimal Price:** ${rev_opt_price:.2f}")
+st.write(f"**Margin-Optimal Price:** ${margin_opt_price:.2f}")
+low = rev_opt_price * 0.98
+high = rev_opt_price * 1.02
+
+st.write(f"**Suggested Test Range:** ${low:.2f} to ${high:.2f}")
 
 # TOGGLE (Revenue vs Margin)
 view = st.radio(
@@ -235,47 +238,70 @@ chart_data = pd.DataFrame({
 
 if view == "Revenue":
     fig = px.line(chart_data, x="Price", y="Revenue", title="Revenue vs Price")
-    fig.add_scatter(
-        x=[current_price],
-        y=[current_revenue],
-        mode="markers",
-        name="Current"
-    )
-    fig.add_scatter(
-        x=[scenario_price],
-        y=[scenario_revenue],
-        mode="markers",
-        name="Scenario"
-    )
-    fig.add_scatter(
-        x=[rev_opt_price],
-        y=[rev_opt_value],
-        mode="markers",
-        name="Revenue Optimal"
+
+# Current price line
+fig.add_vline(
+    x=current_price,
+    line_dash="dash",
+    line_color="red",
+    annotation_text="Current",
+    annotation_position="top"
+)
+
+# Scenario price line
+fig.add_vline(
+    x=scenario_price,
+    line_dash="dash",
+    line_color="green",
+    annotation_text="Scenario",
+    annotation_position="top"
+)
+
+# Optimal price line
+fig.add_vline(
+    x=rev_opt_price,
+    line_dash="dash",
+    line_color="purple",
+    annotation_text="Optimal",
+    annotation_position="top"
+)
     )
 else:
     fig = px.line(chart_data, x="Price", y="Margin", title="Margin vs Price")
-    fig.add_scatter(
-        x=[current_price],
-        y=[current_margin],
-        mode="markers",
-        name="Current"
-    )
-    fig.add_scatter(
-        x=[scenario_price],
-        y=[scenario_margin],
-        mode="markers",
-        name="Scenario"
-    )
-    fig.add_scatter(
-        x=[margin_opt_price],
-        y=[margin_opt_value],
-        mode="markers",
-        name="Margin Optimal"
-    )
+
+fig.add_vline(
+    x=current_price,
+    line_dash="dash",
+    line_color="red",
+    annotation_text="Current",
+    annotation_position="top"
+)
+
+fig.add_vline(
+    x=scenario_price,
+    line_dash="dash",
+    line_color="green",
+    annotation_text="Scenario",
+    annotation_position="top"
+)
+
+fig.add_vline(
+    x=margin_opt_price,
+    line_dash="dash",
+    line_color="purple",
+    annotation_text="Optimal",
+    annotation_position="top"
+)
 
 fig.update_layout(template="plotly_dark")
+
 st.plotly_chart(fig, use_container_width=True)
+
+st.caption(
+    f"Current Revenue: ${current_revenue:,.0f} | "
+    f"Scenario Revenue: ${scenario_revenue:,.0f} | "
+    f"Optimal Revenue: ${rev_opt_value:,.0f}"
+)
 
 # HISTORICAL PRICE TREND
 st.subheader("Historical Price Trend")
