@@ -47,17 +47,17 @@ month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 if filtered_df["Month"].dtype == object:
     filtered_df["Month"] = filtered_df["Month"].astype(str).str.strip()
 
+    # FIX #2: Warn about unrecognized month values before casting
     unknown_months = set(filtered_df["Month"]) - set(month_order)
     if unknown_months:
         st.warning(f"Unrecognized month values found and excluded: {unknown_months}")
-        filtered_df = filtered_df[filtered_df["Month"].isin(month_order)]
 
     filtered_df["Month"] = pd.Categorical(
         filtered_df["Month"],
         categories=month_order,
         ordered=True
     )
-    filtered_df = filtered_df.sort_values("Month")
+    filtered_df = filtered_df.sort_values("Month").dropna(subset=["Month"])
 
 # Use latest row as current price
 current_price = float(filtered_df["Price"].iloc[-1])
@@ -65,49 +65,63 @@ current_price = float(filtered_df["Price"].iloc[-1])
 if "scenario_price" not in st.session_state:
     st.session_state.scenario_price = current_price
 
-def update_price_from_slider():
-    pct = st.session_state.price_change_slider
-    st.session_state.scenario_price = round(current_price * (1 + pct / 100), 2)
-
-def update_price_from_input():
-    pass
-
 price_change_pct = st.sidebar.slider(
     "Price Change (%)",
     min_value=-20,
     max_value=20,
     value=0,
     step=1,
-    key="price_change_slider",
-    on_change=update_price_from_slider
+    key="price_change_pct"
 )
+
+# Derive price from slider, then allow direct override via number input
+slider_driven_price = round(current_price * (1 + price_change_pct / 100), 2)
 
 scenario_price = st.sidebar.number_input(
     "Or Enter Scenario Price Directly",
     min_value=0.0,
-    value=float(st.session_state.scenario_price),
+    value=float(slider_driven_price),
     step=0.25,
-    key="scenario_price"
+    key="scenario_price_input"
 )
 
-# SIMULATION LOGIC
-sku_prices = filtered_df["Price"].dropna()
-unit_cost = float(sku_prices.min()) * 0.65  
-peak_revenue_price = float(sku_prices.mean()) * 1.05  
-max_revenue = peak_revenue_price * float(sku_prices.mean()) * 1.1 
+hist_avg_price = float(filtered_df["Price"].mean())
+hist_price_range = float(filtered_df["Price"].max() - filtered_df["Price"].min())
 
-def simulate(price):
-    revenue = max_revenue - 8.0 * (price - peak_revenue_price) ** 2
+# Estimate unit cost as ~63% of average historical price (typical retail markup)
+unit_cost = hist_avg_price * 0.63
+
+# Peak revenue price anchored to historical average
+peak_revenue_price = hist_avg_price * 1.02
+
+# Max revenue scaled proportionally to price level
+max_revenue = hist_avg_price * 100
+
+
+def simulate(price, peak_rev_price, max_rev, cost):
+    """
+    Simulate demand, revenue, and margin for a given price.
+    Uses a quadratic revenue curve peaked at peak_rev_price.
+    Margin optimum will naturally differ from revenue optimum.
+    """
+    # Curvature scales with price level so % sensitivity stays consistent
+    curvature = max_rev / ((peak_rev_price * 0.25) ** 2)
+
+    revenue = max_rev - curvature * (price - peak_rev_price) ** 2
     revenue = max(revenue, 0)
 
     demand = revenue / price if price > 0 else 0
-
-    margin = (price - unit_cost) * demand if price > unit_cost else 0
+    margin = (price - cost) * demand if price > cost else 0
 
     return demand, revenue, margin
 
-current_demand, current_revenue, current_margin = simulate(current_price)
-scenario_demand, scenario_revenue, scenario_margin = simulate(scenario_price)
+
+current_demand, current_revenue, current_margin = simulate(
+    current_price, peak_revenue_price, max_revenue, unit_cost
+)
+scenario_demand, scenario_revenue, scenario_margin = simulate(
+    scenario_price, peak_revenue_price, max_revenue, unit_cost
+)
 
 demand_change = ((scenario_demand - current_demand) / current_demand) * 100 if current_demand != 0 else 0
 revenue_change = ((scenario_revenue - current_revenue) / current_revenue) * 100 if current_revenue != 0 else 0
@@ -125,15 +139,16 @@ else:
 st.title("Pricing Analytics Simulator")
 st.caption("Evaluate pricing scenarios across demand, revenue, and margin tradeoffs")
 
-col1, col2, col3 = st.columns(3)
-col4, col5, col6 = st.columns(3)
+row1_col1, row1_col2, row1_col3 = st.columns(3)
+row2_col1, row2_col2, row2_col3 = st.columns(3)
 
-col1.metric("Current Price", f"${current_price:.2f}")
-col2.metric("Scenario Price", f"${scenario_price:.2f}")
-col3.metric("Pricing Signal", pricing_signal)
-col4.metric("Demand Change", f"{demand_change:.2f}%")
-col5.metric("Revenue Change", f"{revenue_change:.2f}%")
-col6.metric("Margin Change", f"{margin_change:.2f}%")
+row1_col1.metric("Current Price", f"${current_price:.2f}")
+row1_col2.metric("Scenario Price", f"${scenario_price:.2f}")
+row1_col3.metric("Pricing Signal", pricing_signal)
+
+row2_col1.metric("Demand Change", f"{demand_change:.2f}%")
+row2_col2.metric("Revenue Change", f"{revenue_change:.2f}%")
+row2_col3.metric("Margin Change", f"{margin_change:.2f}%")
 
 # RECOMMENDATION BANNER
 if abs(scenario_price - current_price) < 0.01:
@@ -147,7 +162,7 @@ else:
 
 # OPTIMIZATION SWEEP
 prices = np.linspace(current_price * 0.8, current_price * 1.2, 50)
-results = [simulate(p) for p in prices]
+results = [simulate(p, peak_revenue_price, max_revenue, unit_cost) for p in prices]
 
 demands = [r[0] for r in results]
 revenues = [r[1] for r in results]
@@ -229,13 +244,12 @@ with left_col:
 
 with right_col:
     st.subheader("Recommended Pricing")
-    st.write(f"**Revenue-Optimal Price:** ${rev_opt_price:.2f}")
-    st.write(f"**Margin-Optimal Price:** ${margin_opt_price:.2f}")
+    st.markdown(f"**Revenue-Optimal Price:** \\${rev_opt_price:.2f}")
+    st.markdown(f"**Margin-Optimal Price:** \\${margin_opt_price:.2f}")
 
     low = rev_opt_price * 0.98
     high = rev_opt_price * 1.02
-
-    st.write(f"**Suggested Test Range:** ${low:.2f} to ${high:.2f}")
+    st.markdown(f"**Suggested Test Range:** \\${low:.2f} to \\${high:.2f}")
 
 # TOGGLE (Revenue vs Margin)
 view = st.radio(
