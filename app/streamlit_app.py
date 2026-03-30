@@ -39,6 +39,19 @@ if filtered_df.empty:
     st.error("No data found for the selected SKU and Branch.")
     st.stop()
 
+# HISTORICAL TREND SORTING
+month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+if filtered_df["Month"].dtype == object:
+    filtered_df["Month"] = filtered_df["Month"].astype(str).str.strip()
+    filtered_df["Month"] = pd.Categorical(
+        filtered_df["Month"],
+        categories=month_order,
+        ordered=True
+    )
+    filtered_df = filtered_df.sort_values("Month")
+
 # Use latest row as current price
 current_price = float(filtered_df["Price"].iloc[-1])
 
@@ -60,16 +73,21 @@ scenario_price = st.sidebar.number_input(
 )
 
 # SIMULATION LOGIC (TEMP PLACEHOLDER)
+# Replace later with your real model
 def simulate(price):
-    peak_price = 146
-    max_revenue = 14500
-    margin_rate = 0.30
+    peak_revenue_price = 146.0
+    max_revenue = 14500.0
+    unit_cost = 92.0
 
-    revenue = max_revenue - 8 * (price - peak_price) ** 2
+    # Revenue curve with a visible peak
+    revenue = max_revenue - 8.0 * (price - peak_revenue_price) ** 2
     revenue = max(revenue, 0)
 
+    # Demand implied by revenue and price
     demand = revenue / price if price > 0 else 0
-    margin = revenue * margin_rate
+
+    # Margin uses unit cost, so margin optimum can differ from revenue optimum
+    margin = (price - unit_cost) * demand if price > unit_cost else 0
 
     return demand, revenue, margin
 
@@ -105,12 +123,12 @@ col6.metric("Pricing Signal", pricing_signal)
 # RECOMMENDATION BANNER
 if abs(scenario_price - current_price) < 0.01:
     st.info("No price change selected yet")
-elif revenue_change > 0 and margin_change >= 0:
+elif revenue_change > 0 and margin_change > 0 and abs(demand_change) < 5:
     st.success("Controlled price increase appears viable")
-elif revenue_change > 0:
-    st.warning("Revenue may improve, but tradeoffs should be reviewed")
+elif revenue_change > 0 and abs(demand_change) < 10:
+    st.warning("Revenue may improve, but customer response should be monitored")
 else:
-    st.warning("Price change may negatively impact revenue")
+    st.warning("Scenario may weaken overall performance")
 
 # OPTIMIZATION SWEEP
 prices = np.linspace(current_price * 0.8, current_price * 1.2, 50)
@@ -120,23 +138,19 @@ demands = [r[0] for r in results]
 revenues = [r[1] for r in results]
 margins = [r[2] for r in results]
 
-rev_opt_price = float(prices[np.argmax(revenues)])
-margin_opt_price = float(prices[np.argmax(margins)])
+rev_opt_idx = int(np.argmax(revenues))
+margin_opt_idx = int(np.argmax(margins))
+
+rev_opt_price = float(prices[rev_opt_idx])
+margin_opt_price = float(prices[margin_opt_idx])
+
+rev_opt_value = float(revenues[rev_opt_idx])
+margin_opt_value = float(margins[margin_opt_idx])
 
 # DECISION GUIDANCE LOGIC
-# -----------------------------
-# DECISION GUIDANCE LOGIC
-# -----------------------------
-distance_from_revenue_opt = abs(scenario_price - rev_opt_price) / rev_opt_price * 100
-distance_from_margin_opt = abs(scenario_price - margin_opt_price) / margin_opt_price * 100
+distance_from_revenue_opt = abs(scenario_price - rev_opt_price) / rev_opt_price * 100 if rev_opt_price != 0 else 0
+distance_from_margin_opt = abs(scenario_price - margin_opt_price) / margin_opt_price * 100 if margin_opt_price != 0 else 0
 nearest_opt_distance = min(distance_from_revenue_opt, distance_from_margin_opt)
-
-if abs(demand_change) < 3 and nearest_opt_distance <= 3:
-    risk_level = "Low"
-elif abs(demand_change) < 8 and nearest_opt_distance <= 8:
-    risk_level = "Moderate"
-else:
-    risk_level = "High"
 
 if scenario_price > current_price:
     scenario_direction = "Price Increase"
@@ -147,19 +161,29 @@ else:
 
 hist_min = float(filtered_df["Price"].min())
 hist_max = float(filtered_df["Price"].max())
+hist_mid = (hist_min + hist_max) / 2
+hist_range = hist_max - hist_min if hist_max > hist_min else 1
+distance_from_history_mid = abs(scenario_price - hist_mid) / hist_range
 
 if hist_min <= scenario_price <= hist_max:
     hist_context = "Within historical price range"
 else:
     hist_context = "Outside historical price range"
 
+if abs(demand_change) < 3 and nearest_opt_distance <= 3:
+    risk_level = "Low"
+elif abs(demand_change) < 8 and nearest_opt_distance <= 8:
+    risk_level = "Moderate"
+else:
+    risk_level = "High"
+
 num_obs = len(filtered_df)
 
 if num_obs < 6:
     confidence_level = "Low"
-elif nearest_opt_distance <= 3 and abs(demand_change) <= 5:
+elif nearest_opt_distance <= 3 and abs(demand_change) <= 5 and distance_from_history_mid <= 0.6:
     confidence_level = "High"
-elif nearest_opt_distance <= 8 and abs(demand_change) <= 10:
+elif nearest_opt_distance <= 8 and abs(demand_change) <= 10 and distance_from_history_mid <= 1.0:
     confidence_level = "Moderate"
 else:
     confidence_level = "Low"
@@ -176,7 +200,7 @@ elif revenue_change < 0 and margin_change > 0:
     suggested_action = "Margin improves, but revenue declines; suitable only if margin protection is the priority"
 else:
     suggested_action = "Not recommended: modeled tradeoff suggests the scenario weakens overall performance"
-    
+
 # DECISION GUIDANCE + RECOMMENDED PRICING
 left_col, right_col = st.columns([3, 2])
 
@@ -192,7 +216,7 @@ with right_col:
     st.subheader("Recommended Pricing")
     st.write(f"**Best for Revenue:** ${rev_opt_price:.2f}")
     st.write(f"**Best for Margin:** ${margin_opt_price:.2f}")
-    st.write("**Suggested Test Range:** ±5%")
+    st.write(f"**Suggested Test Range:** ${rev_opt_price * 0.98:.2f} – ${rev_opt_price * 1.02:.2f}")
 
 # TOGGLE (Revenue vs Margin)
 view = st.radio(
@@ -211,21 +235,41 @@ chart_data = pd.DataFrame({
 
 if view == "Revenue":
     fig = px.line(chart_data, x="Price", y="Revenue", title="Revenue vs Price")
-    fig.add_scatter(x=[current_price], y=[current_revenue], mode="markers", name="Current")
-    fig.add_scatter(x=[scenario_price], y=[scenario_revenue], mode="markers", name="Scenario")
+    fig.add_scatter(
+        x=[current_price],
+        y=[current_revenue],
+        mode="markers",
+        name="Current"
+    )
+    fig.add_scatter(
+        x=[scenario_price],
+        y=[scenario_revenue],
+        mode="markers",
+        name="Scenario"
+    )
     fig.add_scatter(
         x=[rev_opt_price],
-        y=[max(revenues)],
+        y=[rev_opt_value],
         mode="markers",
         name="Revenue Optimal"
     )
 else:
     fig = px.line(chart_data, x="Price", y="Margin", title="Margin vs Price")
-    fig.add_scatter(x=[current_price], y=[current_margin], mode="markers", name="Current")
-    fig.add_scatter(x=[scenario_price], y=[scenario_margin], mode="markers", name="Scenario")
+    fig.add_scatter(
+        x=[current_price],
+        y=[current_margin],
+        mode="markers",
+        name="Current"
+    )
+    fig.add_scatter(
+        x=[scenario_price],
+        y=[scenario_margin],
+        mode="markers",
+        name="Scenario"
+    )
     fig.add_scatter(
         x=[margin_opt_price],
-        y=[max(margins)],
+        y=[margin_opt_value],
         mode="markers",
         name="Margin Optimal"
     )
@@ -235,17 +279,6 @@ st.plotly_chart(fig, use_container_width=True)
 
 # HISTORICAL PRICE TREND
 st.subheader("Historical Price Trend")
-
-month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-if filtered_df["Month"].dtype == object:
-    filtered_df["Month"] = pd.Categorical(
-        filtered_df["Month"],
-        categories=month_order,
-        ordered=True
-    )
-    filtered_df = filtered_df.sort_values("Month")
 
 hist_fig = px.line(
     filtered_df,
