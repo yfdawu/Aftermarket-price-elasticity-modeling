@@ -252,7 +252,7 @@ with tab1:
         y_curve    = current["revenues"]
         opt_price  = rev_opt_price
         y_label    = "Revenue ($)"
-        chart_title = "Revenue vs Price  ·  GB Model"
+        chart_title = "Revenue vs Price  ·  Gradient Boosting Model"
         zone_lo, zone_hi = low, high
     else:
         y_current  = current["margin"]
@@ -261,7 +261,7 @@ with tab1:
         y_curve    = current["margins"]
         opt_price  = margin_opt_price
         y_label    = "Margin ($)"
-        chart_title = "Margin vs Price  ·  GB Model"
+        chart_title = "Margin vs Price  ·  Gradient Boosting Model"
         zone_lo = margin_opt_price * 0.98
         zone_hi = margin_opt_price * 1.02
 
@@ -486,7 +486,7 @@ with tab2:
 
 with tab3:
     st.subheader("Diagnostics")
-    st.caption("Distribution, volatility, cost sensitivity, and GB model response curves")
+    st.caption("Distribution, volatility, cost sensitivity, and Gradient Boosting model response curves")
 
     diag_df = df[(df["SKU"] == sku) & (df["Branch"] == branch)].copy()
     diag_df["Month"] = diag_df["Month"].astype(str)
@@ -525,7 +525,7 @@ with tab3:
     sweep_revenues = current["revenues"]
 
     with dl2:
-        st.markdown("### GB Model: Price vs Demand")
+        st.markdown("### Gradient Boosting Model: Price vs Demand")
         demand_fig = go.Figure()
         demand_fig.add_trace(go.Scatter(x=sweep_prices, y=sweep_units,
                                         mode="lines", name="Predicted Demand",
