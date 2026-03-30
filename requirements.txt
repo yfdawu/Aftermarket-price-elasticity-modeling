@@ -3,4 +3,6 @@ numpy
 xgboost
 scikit-learn
 streamlit
-matplotlib
+scipy
+plotly
+openpyxl
