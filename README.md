@@ -16,7 +16,7 @@ It combines demand modeling, scenario testing, and portfolio-level insights into
 
 ## Application Preview
 
-![Dashboard](assets/Pricing Simulator.png)
+![Dashboard](assets/Pricing_Simulator.png)
 
 ---
 
@@ -24,7 +24,7 @@ It combines demand modeling, scenario testing, and portfolio-level insights into
 
 ### Scenario Simulation
 
-![Scenario](assets/Pricing Simulator.png)
+![Scenario](assets/Pricing_Simulator.png)
 
 Test different pricing decisions and instantly see how they affect:
 
@@ -39,9 +39,9 @@ The tool also provides a simple pricing signal (e.g., resilient vs sensitive) an
 
 ### Revenue & Demand Behavior
 
-![Revenue](assets/Revenue Graph: Historial Graph.png)
+![Revenue](assets/Revenue_Graph_Historial_Graph.png)
 
-![Model](assets/Modeled Price vs Revenue Graph.png)
+![Model](assets/Modeled_Price_vs_Revenue_Graph.png)
 
 These charts show how revenue and demand respond to price changes.
 
@@ -51,11 +51,11 @@ Instead of assuming a straight-line relationship, the model captures more realis
 
 ### Volume & Tradeoff Analysis
 
-![Volume](assets/Volume Analysis Tab.png)
+![Volume](assets/Volume_Analysis_Tab.png)
 
-![Volume Table](assets/Volume Scenario Comparison.png)
+![Volume Table](assets/Volume_Scenario_Comparison.png)
 
-![Tradeoff](assets/Tradeoff Table Full.png)
+![Tradeoff](assets/Tradeoff_Table_Full.png)
 
 This section focuses on unit economics:
 
@@ -67,7 +67,7 @@ This section focuses on unit economics:
 
 ### Cost Sensitivity
 
-![Cost](assets/Cost Sensitivity Analysis.png)
+![Cost](assets/Cost_Sensitivity_Analysis.png)
 
 Shows how changes in cost assumptions impact margin.
 
@@ -77,7 +77,7 @@ Useful for understanding risk when input costs fluctuate.
 
 ### Diagnostics & Historical Context
 
-![Diagnostics](assets/Diagnostic Table.png)
+![Diagnostics](assets/Diagnostic_Table.png)
 
 Provides context behind the model:
 
@@ -89,9 +89,9 @@ Provides context behind the model:
 
 ### Portfolio View
 
-![Portfolio](assets/Portfolio View.png)
+![Portfolio](assets/Portfolio_View.png)
 
-![Portfolio Table](assets/Portfolio Pricing Table.png)
+![Portfolio Table](assets/Portfolio_Pricing_Table.png)
 
 Looks across multiple products to identify pricing opportunities.
 
