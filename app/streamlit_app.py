@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 
 # PAGE CONFIG
 st.set_page_config(
@@ -16,7 +17,7 @@ def load_data():
 
 df = load_data()
 
-# OPTIONAL: CLEAN COLUMN NAMES
+# CLEAN COLUMN NAMES
 df.columns = [col.strip() for col in df.columns]
 
 # CHECK REQUIRED COLUMNS
@@ -45,6 +46,12 @@ month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 
 if filtered_df["Month"].dtype == object:
     filtered_df["Month"] = filtered_df["Month"].astype(str).str.strip()
+
+    unknown_months = set(filtered_df["Month"]) - set(month_order)
+    if unknown_months:
+        st.warning(f"Unrecognized month values found and excluded: {unknown_months}")
+        filtered_df = filtered_df[filtered_df["Month"].isin(month_order)]
+
     filtered_df["Month"] = pd.Categorical(
         filtered_df["Month"],
         categories=month_order,
@@ -55,38 +62,46 @@ if filtered_df["Month"].dtype == object:
 # Use latest row as current price
 current_price = float(filtered_df["Price"].iloc[-1])
 
+if "scenario_price" not in st.session_state:
+    st.session_state.scenario_price = current_price
+
+def update_price_from_slider():
+    pct = st.session_state.price_change_slider
+    st.session_state.scenario_price = round(current_price * (1 + pct / 100), 2)
+
+def update_price_from_input():
+    pass
+
 price_change_pct = st.sidebar.slider(
     "Price Change (%)",
     min_value=-20,
     max_value=20,
     value=0,
-    step=1
+    step=1,
+    key="price_change_slider",
+    on_change=update_price_from_slider
 )
-
-slider_price = current_price * (1 + price_change_pct / 100)
 
 scenario_price = st.sidebar.number_input(
     "Or Enter Scenario Price Directly",
     min_value=0.0,
-    value=float(round(slider_price, 2)),
-    step=0.25
+    value=float(st.session_state.scenario_price),
+    step=0.25,
+    key="scenario_price"
 )
 
-# SIMULATION LOGIC (TEMP PLACEHOLDER)
-# Replace later with your real model
-def simulate(price):
-    peak_revenue_price = 146.0
-    max_revenue = 14500.0
-    unit_cost = 92.0
+# SIMULATION LOGIC
+sku_prices = filtered_df["Price"].dropna()
+unit_cost = float(sku_prices.min()) * 0.65  
+peak_revenue_price = float(sku_prices.mean()) * 1.05  
+max_revenue = peak_revenue_price * float(sku_prices.mean()) * 1.1 
 
-    # Revenue curve with a visible peak
+def simulate(price):
     revenue = max_revenue - 8.0 * (price - peak_revenue_price) ** 2
     revenue = max(revenue, 0)
 
-    # Demand implied by revenue and price
     demand = revenue / price if price > 0 else 0
 
-    # Margin uses unit cost, so margin optimum can differ from revenue optimum
     margin = (price - unit_cost) * demand if price > unit_cost else 0
 
     return demand, revenue, margin
@@ -110,15 +125,15 @@ else:
 st.title("Pricing Analytics Simulator")
 st.caption("Evaluate pricing scenarios across demand, revenue, and margin tradeoffs")
 
-# KPI ROW
-col1, col2, col3, col4, col5, col6 = st.columns(6)
+col1, col2, col3 = st.columns(3)
+col4, col5, col6 = st.columns(3)
 
 col1.metric("Current Price", f"${current_price:.2f}")
 col2.metric("Scenario Price", f"${scenario_price:.2f}")
-col3.metric("Demand Change", f"{demand_change:.2f}%")
-col4.metric("Revenue Change", f"{revenue_change:.2f}%")
-col5.metric("Margin Change", f"{margin_change:.2f}%")
-col6.metric("Pricing Signal", pricing_signal)
+col3.metric("Pricing Signal", pricing_signal)
+col4.metric("Demand Change", f"{demand_change:.2f}%")
+col5.metric("Revenue Change", f"{revenue_change:.2f}%")
+col6.metric("Margin Change", f"{margin_change:.2f}%")
 
 # RECOMMENDATION BANNER
 if abs(scenario_price - current_price) < 0.01:
@@ -221,7 +236,7 @@ with right_col:
     high = rev_opt_price * 1.02
 
     st.write(f"**Suggested Test Range:** ${low:.2f} to ${high:.2f}")
-    
+
 # TOGGLE (Revenue vs Margin)
 view = st.radio(
     "View Optimization",
@@ -244,7 +259,7 @@ if view == "Revenue":
     fig.add_vline(x=scenario_price, line_dash="dash", line_color="green")
     fig.add_vline(x=rev_opt_price, line_dash="dash", line_color="purple")
 
-    fig.add_scatter(
+    fig.add_trace(go.Scatter(
         x=[current_price, scenario_price, rev_opt_price],
         y=[current_revenue, scenario_revenue, rev_opt_value],
         mode="markers+text",
@@ -252,7 +267,7 @@ if view == "Revenue":
         textposition="top center",
         marker=dict(size=10),
         showlegend=False
-    )
+    ))
 
 else:
     fig = px.line(chart_data, x="Price", y="Margin", title="Margin vs Price")
@@ -261,7 +276,7 @@ else:
     fig.add_vline(x=scenario_price, line_dash="dash", line_color="green")
     fig.add_vline(x=margin_opt_price, line_dash="dash", line_color="purple")
 
-    fig.add_scatter(
+    fig.add_trace(go.Scatter(
         x=[current_price, scenario_price, margin_opt_price],
         y=[current_margin, scenario_margin, margin_opt_value],
         mode="markers+text",
@@ -269,27 +284,22 @@ else:
         textposition="top center",
         marker=dict(size=10),
         showlegend=False
-    )
+    ))
 
 fig.update_layout(template="plotly_dark")
-
 st.plotly_chart(fig, use_container_width=True)
 
 if view == "Revenue":
-    st.markdown(
-        f"**Current Revenue:** ${current_revenue:,.0f} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"**Scenario Revenue:** ${scenario_revenue:,.0f} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"**Optimal Revenue:** ${rev_opt_value:,.0f}",
-        unsafe_allow_html=True
-    )
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Current Revenue", f"${current_revenue:,.0f}")
+    m2.metric("Scenario Revenue", f"${scenario_revenue:,.0f}")
+    m3.metric("Optimal Revenue", f"${rev_opt_value:,.0f}")
 else:
-    st.markdown(
-        f"**Current Margin:** ${current_margin:,.0f} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"**Scenario Margin:** ${scenario_margin:,.0f} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"**Optimal Margin:** ${margin_opt_value:,.0f}",
-        unsafe_allow_html=True
-    )
-    
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Current Margin", f"${current_margin:,.0f}")
+    m2.metric("Scenario Margin", f"${scenario_margin:,.0f}")
+    m3.metric("Optimal Margin", f"${margin_opt_value:,.0f}")
+
 # HISTORICAL PRICE TREND
 st.subheader("Historical Price Trend")
 
