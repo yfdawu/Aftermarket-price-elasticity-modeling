@@ -2,14 +2,15 @@
 app/streamlit_app.py
 Pricing Analytics Simulator — Streamlit frontend.
 Model backend: src/pricing_model.py (XGBoost gradient boosting)
-
 Startup sequence
+----------------
 1. load_data()           — load CSV once, cached
 2. train_model()         — train XGBoost once, cached
 3. precompute_sweeps()   — sweep all SKU x Branch combos, cached
    ↑ all three steps run once on first load (~2-3 sec), then never again
 
 Runtime (every slider move)
+---------------------------
 4. lookup_scenario()     — interpolate from precomputed sweep, instant
 """
 
@@ -34,13 +35,17 @@ from src.pricing_model import (
     sensitivity_label,
 )
 
-#  PAGE CONFIG
+# PAGE CONFIG
+
 st.set_page_config(
     page_title="Pricing Analytics Simulator",
     layout="wide"
 )
 
-# STARTUP: LOAD → TRAIN → PRECOMPUTE 
+# STARTUP: LOAD → TRAIN → PRECOMPUTE ───────────────────────────────────────
+# All three are cached — they only run once per session.
+# The spinner gives the user feedback during that first load.
+
 @st.cache_data
 def get_data():
     return load_data()
@@ -65,13 +70,14 @@ with st.spinner("Training pricing model and precomputing price curves..."):
     model, feature_columns = get_model(df)
     sweeps = get_sweeps(df, model, feature_columns)
 
-# SIDEBAR 
+# SIDEBAR ───────────────────────────────────────────────────────────────────
 
 st.sidebar.header("Scenario Inputs")
 
 sku    = st.sidebar.selectbox("Select Product (SKU)",  sorted(df["SKU"].dropna().unique()))
 branch = st.sidebar.selectbox("Select Branch",         sorted(df["Branch"].dropna().unique()))
 
+# Reset scenario price when SKU or branch changes
 sku_branch_key = f"{sku}__{branch}"
 if st.session_state.get("last_sku_branch") != sku_branch_key:
     snap = get_product_snapshot(df, sku, branch)
@@ -90,6 +96,7 @@ price_change_pct = st.sidebar.slider(
     step=1,
 )
 
+# Slider drives scenario price; number input allows manual override
 slider_price = round(current_price * (1 + price_change_pct / 100), 2)
 
 scenario_price = st.sidebar.number_input(
@@ -99,7 +106,8 @@ scenario_price = st.sidebar.number_input(
     step=0.25,
 )
 
-#  CORE LOOKUPS
+# CORE LOOKUPS ──────────────────────────────────────────────────────────────
+
 current  = lookup_scenario(sweeps, sku, branch, current_price)
 scenario = lookup_scenario(sweeps, sku, branch, scenario_price)
 
@@ -168,12 +176,12 @@ elif revenue_change < 0 and margin_change > 0:
 else:
     suggested_action = "Not recommended: modeled tradeoff suggests the scenario weakens overall performance"
 
-#PAGE HEADER 
+# PAGE HEADER ───────────────────────────────────────────────────────────────
 
 st.title("Pricing Analytics Simulator")
-st.caption("Demand model: XGBoost (gradient boosting) · Trained on historical pricing data")
+st.caption("Demand model: XGBoost Gradient Boosting · Trained on historical pricing data")
 
-#TABS
+# TABS ──────────────────────────────────────────────────────────────────────
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Scenario Simulator",
@@ -182,7 +190,6 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Portfolio View",
     "Model Details",
 ])
-
 # TAB 1 — SCENARIO SIMULATOR
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -337,7 +344,6 @@ with tab1:
     )
     hist_fig.update_layout(template="plotly_dark")
     st.plotly_chart(hist_fig, use_container_width=True)
-
 # TAB 2 — VOLUME ANALYSIS
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -437,27 +443,27 @@ with tab2:
     tfig.add_trace(go.Scatter(
         x=tradeoff_units,
         y=[u * current_price for u in tradeoff_units],
-        mode="lines", name=f"Revenue @ Current (\\${current_price:.2f})",
+        mode="lines", name=f"Revenue @ Current (${current_price:.2f})",
         line=dict(color="tomato")
     ))
     tfig.add_trace(go.Scatter(
         x=tradeoff_units,
         y=[u * rev_opt_price for u in tradeoff_units],
-        mode="lines", name=f"Revenue @ Optimal (\\${rev_opt_price:.2f})",
+        mode="lines", name=f"Revenue @ Optimal (${rev_opt_price:.2f})",
         line=dict(color="mediumpurple")
     ))
     tfig.add_trace(go.Scatter(
         x=tradeoff_units,
         y=[u * (current_price - unit_cost) if current_price > unit_cost else 0
            for u in tradeoff_units],
-        mode="lines", name=f"Margin @ Current (\\${current_price:.2f})",
+        mode="lines", name=f"Margin @ Current (${current_price:.2f})",
         line=dict(color="tomato", dash="dash")
     ))
     tfig.add_trace(go.Scatter(
         x=tradeoff_units,
         y=[u * (rev_opt_price - unit_cost) if rev_opt_price > unit_cost else 0
            for u in tradeoff_units],
-        mode="lines", name=f"Margin @ Optimal (\\${rev_opt_price:.2f})",
+        mode="lines", name=f"Margin @ Optimal (${rev_opt_price:.2f})",
         line=dict(color="mediumpurple", dash="dash")
     ))
     tfig.update_layout(
@@ -480,7 +486,7 @@ with tab2:
         })
     with st.expander("View full tradeoff table"):
         st.dataframe(pd.DataFrame(tradeoff_rows), use_container_width=True, hide_index=True)
-        
+
 # TAB 3 — DIAGNOSTICS
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -518,7 +524,7 @@ with tab3:
         tfig2.update_layout(template="plotly_dark")
         st.plotly_chart(tfig2, use_container_width=True)
 
-    # GB model response curves (from precomputed sweep)
+    # Gradient Boosting model response curves (from precomputed sweep)
     dl2, dr2 = st.columns(2)
     sweep_prices   = current["prices"]
     sweep_units    = current["units"]
@@ -534,11 +540,11 @@ with tab3:
         demand_fig.add_vline(x=scenario_price, line_dash="dash", line_color="green")
         demand_fig.update_layout(template="plotly_dark",
                                   xaxis_title="Price ($)", yaxis_title="Predicted Units",
-                                  title="Demand Response (GB Model)")
+                                  title="Demand Response (Gradient Boosting)")
         st.plotly_chart(demand_fig, use_container_width=True)
 
     with dr2:
-        st.markdown("### GB Model: Price vs Revenue")
+        st.markdown("### Gradient Boosting Model: Price vs Revenue")
         rev_fig = go.Figure()
         rev_fig.add_trace(go.Scatter(x=sweep_prices, y=sweep_revenues,
                                      mode="lines", name="Predicted Revenue",
@@ -547,7 +553,7 @@ with tab3:
         rev_fig.add_vline(x=rev_opt_price,  line_dash="dash", line_color="purple")
         rev_fig.update_layout(template="plotly_dark",
                                xaxis_title="Price ($)", yaxis_title="Predicted Revenue ($)",
-                               title="Revenue Response (GB Model)")
+                               title="Revenue Response (Gradient Boosting)")
         st.plotly_chart(rev_fig, use_container_width=True)
 
     # Cost sensitivity
@@ -670,7 +676,6 @@ with tab4:
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             else:
                 st.warning("Install openpyxl for Excel export: `pip install openpyxl`")
-
 
 # TAB 5 — MODEL DETAILS
 # ══════════════════════════════════════════════════════════════════════════════
